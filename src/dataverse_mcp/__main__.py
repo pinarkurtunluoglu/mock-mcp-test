@@ -54,10 +54,6 @@ def main() -> None:
     from dataverse_mcp.server import mcp
 
     # Run with the configured transport (stdio or sse)
-    # Completely remove auth token to disable mandatory Bearer check
-    import os
-    os.environ.pop("FASTMCP_AUTH_TOKEN", None)
-    
     mcp.run(transport=settings.mcp_transport.value)
 
 

@@ -6,8 +6,14 @@ This version IS HARDCODED to use mock data for verification.
 
 from __future__ import annotations
 
+import os
 import structlog
 from fastmcp import FastMCP
+
+# ── Auth Disable for Mock Version ──────────────────────
+# Completely remove auth token to disable mandatory Bearer check
+# Doing this before mcp initialization is critical
+os.environ.pop("FASTMCP_AUTH_TOKEN", None)
 
 from dataverse_mcp.config import get_settings
 from dataverse_mcp.services.formatter import DataFormatter
