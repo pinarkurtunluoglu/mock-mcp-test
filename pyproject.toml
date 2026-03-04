@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dataverse-mcp"
+version = "0.1.0"
+description = "High-performance MCP Server for Microsoft Dataverse — Process and summarize large datasets for AI Agents"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Dataverse MCP Team" }]
+
+dependencies = [
+    "fastmcp>=2.0.0",
+    "msal>=1.28.0",
+    "httpx>=0.27.0",
+    "pydantic-settings>=2.2.0",
+    "structlog>=24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.3.0",
+]
+
+[project.scripts]
+dataverse-mcp = "dataverse_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dataverse_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
