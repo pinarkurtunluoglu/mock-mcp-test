@@ -85,7 +85,7 @@ async def query_inventory_aging(
     If you need to calculate a total, sum, or average across many records, you MUST use the `calculate_inventory_totals` tool instead.
 
     Args:
-        select: Comma-separated column names to return (e.g. 'mserp_itemid,mserp_quantity,mserp_amount').
+        select: Comma-separated column names to return (e.g. 'mserp_itemid,mserp_qty,mserp_amountmst').
                 Leave empty for all columns.
         filter_query: OData $filter expression (e.g. "mserp_itemname eq 'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA'").
         orderby: OData $orderby expression (e.g. "mserp_amountmst desc").
@@ -261,7 +261,7 @@ Yanıtlarınızı Türkçe verin."""
 
 
 @mcp.prompt()
-def filter_aging_items(min_days: str = "90", field_name: str = "mserp_quantity") -> str:
+def filter_aging_items(min_days: str = "90", field_name: str = "mserp_qty") -> str:
     """Prompt template for filtering aged inventory items."""
     return f"""Envanter Yaşlandırma Raporundan {min_days} günden eski kalemleri analiz edin.
 

@@ -24,9 +24,9 @@ async def reproduce_error():
     entity_set = settings.entity_set_name
     
     try:
-        # Test 1: Direct filter via aggregate_table
+        # Test 1: Direct filter via aggregate_table with eq
         filter_query = "mserp_itemname eq 'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA'"
-        print(f"\n[Test 1] Aggregating with filter_query: {filter_query}")
+        print(f"\n[Test 1] Aggregating with EQ: {filter_query}")
         result = await client.aggregate_table(entity_set, "mserp_qty", "sum", filter_query=filter_query)
         print(f"Result: {result}")
         
@@ -34,9 +34,19 @@ async def reproduce_error():
         print(f"ERROR: {e}")
         
     try:
-        # Test 2: Standard query_table with filter
-        filter_query = "mserp_itemname eq 'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA'"
-        print(f"\n[Test 2] Querying directly with filter_query: {filter_query}")
+        # Test 2: Direct filter via aggregate_table with contains
+        filter_query = "contains(mserp_itemname,'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA')"
+        print(f"\n[Test 2] Aggregating with CONTAINS: {filter_query}")
+        result = await client.aggregate_table(entity_set, "mserp_qty", "sum", filter_query=filter_query)
+        print(f"Result: {result}")
+        
+    except Exception as e:
+        print(f"ERROR: {e}")
+        
+    try:
+        # Test 3: Standard query_table with contains
+        filter_query = "contains(mserp_itemname,'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA')"
+        print(f"\n[Test 3] Querying directly with CONTAINS: {filter_query}")
         result = await client.query_table(entity_set, filter_query=filter_query, select="mserp_itemname,mserp_qty", top=5)
         print(f"Result length: {len(result)}")
         
