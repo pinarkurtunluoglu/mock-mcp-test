@@ -88,7 +88,7 @@ class DataverseClient:
         return await self._request("GET", path)
 
     async def query_table(self, entity_set: str, **kwargs) -> list[dict[str, Any]]:
-        """Queries records from an entity set."""
+        """Queries records from an entity set with support for pagination."""
         params = []
         if select := kwargs.get("select"):
             params.append(f"$select={select}")
@@ -96,14 +96,47 @@ class DataverseClient:
             params.append(f"$filter={filter_query}")
         if orderby := kwargs.get("orderby"):
             params.append(f"$orderby={orderby}")
-        if top := kwargs.get("top"):
+        
+        top = kwargs.get("top")
+        fetch_all = kwargs.get("fetch_all", False)
+        
+        if top and not fetch_all:
             params.append(f"$top={top}")
             
         query_string = "&".join(params)
         path = f"{entity_set}?{query_string}" if query_string else entity_set
         
+        if fetch_all:
+            return await self.fetch_all_records(path, max_records=kwargs.get("max_records", 5000))
+        
         result = await self._request("GET", path)
         return result.get("value", [])
+
+    async def fetch_all_records(self, initial_path: str, max_records: int = 5000) -> list[dict[str, Any]]:
+        """Fetches all records by following pagination links up to max_records."""
+        all_records = []
+        current_path = initial_path
+        
+        while current_path and len(all_records) < max_records:
+            result = await self._request("GET", current_path)
+            batch = result.get("value", [])
+            all_records.extend(batch)
+            
+            # Check for next page link
+            next_link = result.get("@odata.nextLink")
+            if next_link:
+                # nextLink is usually a full URL, we need to extract the relative part for _request 
+                # or modify _request to handle full URLs. 
+                # Let's handle it by extracting everything after /api/data/v9.2/
+                marker = "/api/data/v9.2/"
+                if marker in next_link:
+                    current_path = next_link.split(marker)[1]
+                else:
+                    current_path = None # Shouldn't happen with Dataverse
+            else:
+                current_path = None
+                
+        return all_records[:max_records]
 
     async def get_record(self, entity_set: str, record_id: str, **kwargs) -> dict[str, Any]:
         """Retrieves a single record by its ID."""

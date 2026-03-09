@@ -150,31 +150,85 @@ async def get_inventory_aging_record(record_id: str, select: str = "") -> str:
 
 @mcp.tool()
 async def summarize_inventory_aging(
-    select: str = "",
+    select: str = "mserp_qty,mserp_itemname,mserp_headerreportdate",
     filter_query: str = "",
-    top: int = 200,
+    top: int = 2000,
     sample_size: int = 5,
 ) -> str:
-    """Generates a statistical summary of the Inventory Aging Report data.
-    Includes field distributions, numeric stats (min/max/avg), and sample records.
+    """Generates a deep statistical summary of the Inventory Aging Report data.
+    Fetch up to 2000 records (default) to provide a representative view of the dataset.
 
     Args:
-        select: Comma-separated key fields to compute statistics on.
+        select: Comma-separated key fields to compute statistics on (e.g. 'mserp_qty,mserp_itemname').
         filter_query: OData $filter to narrow the data before summarizing.
-        top: Number of records to include in the analysis (default: 200).
+        top: Number of records to include in the analysis (default: 2000, max: 5000).
         sample_size: Number of sample records to show (default: 5).
     """
     try:
+        # Cap at 5000 for safety but allow deep analysis
+        actual_top = min(top, 5000)
+        
         records = await client.query_table(
-            ENTITY_SET, select=select or None, filter_query=filter_query or None, top=top,
+            ENTITY_SET, 
+            select=select or None, 
+            filter_query=filter_query or None, 
+            fetch_all=True,
+            max_records=actual_top
         )
+        
         key_fields = [c.strip() for c in select.split(",")] if select else None
         return summarizer.summarize_records(
             records, table_name="Inventory Aging Report",
             sample_size=sample_size, key_fields=key_fields,
         )
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error during large-scale summary: {e}"
+
+
+@mcp.tool()
+async def calculate_inventory_totals(
+    numeric_fields: str = "mserp_qty",
+    filter_query: str = "",
+    max_records: int = 10000,
+) -> str:
+    """Calculates totals and averages for numeric fields across the entire dataset.
+    Use this for high-level questions like 'Toplam miktar nedir?' or 'Ortalama miktar ne kadar?'.
+
+    Args:
+        numeric_fields: Comma-separated numeric column names (e.g. 'mserp_qty,mserp_amountmst').
+        filter_query: OData $filter to narrow the data.
+        max_records: Maximum records to aggregate (default: 10000).
+    """
+    try:
+        fields = [f.strip() for f in numeric_fields.split(",")]
+        # Fetch only the fields we need to save bandwidth
+        records = await client.query_table(
+            ENTITY_SET, 
+            select=numeric_fields, 
+            filter_query=filter_query or None, 
+            fetch_all=True,
+            max_records=max_records
+        )
+        
+        if not records:
+            return "No records found to calculate totals."
+
+        results = [f"### Aggregated Totals (Processed {len(records):,} records)"]
+        for field in fields:
+            values = [r.get(field) for r in records if isinstance(r.get(field), (int, float))]
+            if values:
+                v_sum = sum(values)
+                v_avg = v_sum / len(values)
+                results.append(f"- **{field}**:")
+                results.append(f"  - Total Sum: `{v_sum:,.2f}`")
+                results.append(f"  - Average: `{v_avg:,.2f}`")
+                results.append(f"  - Min: `{min(values):,.2f}` | Max: `{max(values):,.2f}`")
+            else:
+                results.append(f"- **{field}**: No numeric data found.")
+                
+        return "\n".join(results)
+    except Exception as e:
+        return f"Error calculating totals: {e}"
 
 
 # ═══════════════════════════════════════════════════════════
