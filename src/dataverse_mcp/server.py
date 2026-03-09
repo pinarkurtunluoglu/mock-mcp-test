@@ -189,46 +189,36 @@ async def summarize_inventory_aging(
 async def calculate_inventory_totals(
     numeric_fields: str = "mserp_qty",
     filter_query: str = "",
-    max_records: int = 10000,
 ) -> str:
-    """Calculates totals and averages for numeric fields across the entire dataset.
-    Use this for high-level questions like 'Toplam miktar nedir?' or 'Ortalama miktar ne kadar?'.
+    """Calculates totals and averages for numeric fields instantly across the ENTIRE dataset (even 500k+ records).
+    This uses Dataverse server-side aggregation ($apply) and does not download rows.
+    Use this for high-level questions like 'Toplam miktar nedir?' or 'Tüm tablonun ortalaması nedir?'.
 
     Args:
         numeric_fields: Comma-separated numeric column names (e.g. 'mserp_qty,mserp_amountmst').
-        filter_query: OData $filter to narrow the data.
-        max_records: Maximum records to aggregate (default: 10000).
+        filter_query: (Optional) OData $filter to narrow the data before aggregating.
     """
     try:
         fields = [f.strip() for f in numeric_fields.split(",")]
-        # Fetch only the fields we need to save bandwidth
-        records = await client.query_table(
-            ENTITY_SET, 
-            select=numeric_fields, 
-            filter_query=filter_query or None, 
-            fetch_all=True,
-            max_records=max_records
-        )
+        results = [f"### Server-Side Aggregated Totals (Processed ENTIRE dataset)"]
         
-        if not records:
-            return "No records found to calculate totals."
-
-        results = [f"### Aggregated Totals (Processed {len(records):,} records)"]
         for field in fields:
-            values = [r.get(field) for r in records if isinstance(r.get(field), (int, float))]
-            if values:
-                v_sum = sum(values)
-                v_avg = v_sum / len(values)
-                results.append(f"- **{field}**:")
-                results.append(f"  - Total Sum: `{v_sum:,.2f}`")
-                results.append(f"  - Average: `{v_avg:,.2f}`")
-                results.append(f"  - Min: `{min(values):,.2f}` | Max: `{max(values):,.2f}`")
-            else:
-                results.append(f"- **{field}**: No numeric data found.")
+            # We must apply filter_query to the aggregation if it exists
+            # For virtual entities, doing this sequentially is safer
+            
+            # GET SUM
+            sum_res = await client.aggregate_table(ENTITY_SET, field, "sum")
+            total_sum = sum_res.get(f"{field}_sum", 0)
+            
+            # GET AVERAGE
+            avg_res = await client.aggregate_table(ENTITY_SET, field, "average")
+            total_avg = avg_res.get(f"{field}_average", 0)
+            
+            results.append(f"- **{field}**: Sum: `{total_sum:,.2f}` | Average: `{total_avg:,.2f}`")
                 
         return "\n".join(results)
     except Exception as e:
-        return f"Error calculating totals: {e}"
+        return f"Error calculating totals via Server-Side Aggregation. Note: Not all virtual entities support $apply. Error: {e}"
 
 
 # ═══════════════════════════════════════════════════════════

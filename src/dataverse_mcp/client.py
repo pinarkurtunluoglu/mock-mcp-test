@@ -138,6 +138,37 @@ class DataverseClient:
                 
         return all_records[:max_records]
 
+    async def aggregate_table(self, entity_set: str, numeric_field: str, agg_type: str = "sum") -> dict[str, Any]:
+        """Performs server-side aggregation (Sum, Avg, Min, Max) on a numeric field using $apply.
+        
+        Args:
+            entity_set: The table to query.
+            numeric_field: The column name to aggregate (e.g., 'mserp_qty').
+            agg_type: The type of aggregation ('sum', 'average', 'min', 'max').
+            
+        Returns:
+            A dict containing the aggregated result.
+        """
+        # Ensure correct OData aggregate function names
+        valid_aggs = {"sum": "sum", "avg": "average", "average": "average", "min": "min", "max": "max"}
+        odata_agg = valid_aggs.get(agg_type.lower())
+        if not odata_agg:
+            raise ValueError(f"Unsupported aggregation type: {agg_type}")
+
+        # Construct $apply=aggregate(field with agg_type as alias)
+        alias = f"{numeric_field}_{odata_agg}"
+        apply_clause = f"aggregate({numeric_field} with {odata_agg} as {alias})"
+        
+        path = f"{entity_set}?$apply={apply_clause}"
+        
+        result = await self._request("GET", path)
+        value_list = result.get("value", [])
+        
+        if not value_list:
+            return {alias: 0}
+            
+        return value_list[0]
+
     async def get_record(self, entity_set: str, record_id: str, **kwargs) -> dict[str, Any]:
         """Retrieves a single record by its ID."""
         params = []
