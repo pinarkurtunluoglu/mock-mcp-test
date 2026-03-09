@@ -79,14 +79,17 @@ async def query_inventory_aging(
     orderby: str = "",
     top: int = 50,
 ) -> str:
-    """Queries the Inventory Aging Report table with optional OData filters.
+    """Queries the Inventory Aging Report table and returns raw records.
+    
+    WARNING: DO NOT use this tool to calculate totals or averages. It only returns a maximum of 500 records. 
+    If you need to calculate a total, sum, or average across many records, you MUST use the `calculate_inventory_totals` tool instead.
 
     Args:
         select: Comma-separated column names to return (e.g. 'mserp_itemid,mserp_quantity,mserp_amount').
                 Leave empty for all columns.
-        filter_query: OData $filter expression (e.g. "mserp_quantity gt 100").
-        orderby: OData $orderby expression (e.g. "mserp_amount desc").
-        top: Maximum number of records to return (default: 50, max: 500).
+        filter_query: OData $filter expression (e.g. "mserp_itemname eq 'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA'").
+        orderby: OData $orderby expression (e.g. "mserp_amountmst desc").
+        top: Maximum number of raw records to return (default: 50, max: 500).
     """
     try:
         if top > 500:
@@ -193,10 +196,12 @@ async def calculate_inventory_totals(
     """Calculates totals and averages for numeric fields instantly across the ENTIRE dataset (even 500k+ records).
     This uses Dataverse server-side aggregation ($apply) and does not download rows.
     Use this for high-level questions like 'Toplam miktar nedir?' or 'Tüm tablonun ortalaması nedir?'.
+    
+    CRITICAL INSTRUCTION: ALWAYS USE THIS TOOL if the user asks for the total quantity, sum, or average of a SPECIFIC product or category (by using the `filter_query`). DO NOT use `query_inventory_aging` for calculations.
 
     Args:
         numeric_fields: Comma-separated numeric column names (e.g. 'mserp_qty,mserp_amountmst').
-        filter_query: (Optional) OData $filter to narrow the data before aggregating.
+        filter_query: (Optional) OData $filter to narrow the data before aggregating (e.g. "mserp_itemname eq 'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA'").
     """
     try:
         fields = [f.strip() for f in numeric_fields.split(",")]
