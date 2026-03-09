@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import urllib.parse
 from typing import Any
 
 import httpx
@@ -93,7 +94,9 @@ class DataverseClient:
         if select := kwargs.get("select"):
             params.append(f"$select={select}")
         if filter_query := kwargs.get("filter_query"):
-            params.append(f"$filter={filter_query}")
+            safe_chars = "() eqgtnl'"
+            encoded_filter = urllib.parse.quote(filter_query, safe=safe_chars)
+            params.append(f"$filter={encoded_filter}")
         if orderby := kwargs.get("orderby"):
             params.append(f"$orderby={orderby}")
         
@@ -138,13 +141,14 @@ class DataverseClient:
                 
         return all_records[:max_records]
 
-    async def aggregate_table(self, entity_set: str, numeric_field: str, agg_type: str = "sum") -> dict[str, Any]:
+    async def aggregate_table(self, entity_set: str, numeric_field: str, agg_type: str = "sum", filter_query: str = "") -> dict[str, Any]:
         """Performs server-side aggregation (Sum, Avg, Min, Max) on a numeric field using $apply.
         
         Args:
             entity_set: The table to query.
             numeric_field: The column name to aggregate (e.g., 'mserp_qty').
             agg_type: The type of aggregation ('sum', 'average', 'min', 'max').
+            filter_query: Optional OData filter to apply before aggregating.
             
         Returns:
             A dict containing the aggregated result.
@@ -157,7 +161,13 @@ class DataverseClient:
 
         # Construct $apply=aggregate(field with agg_type as alias)
         alias = f"{numeric_field}_{odata_agg}"
-        apply_clause = f"aggregate({numeric_field} with {odata_agg} as {alias})"
+        
+        if filter_query:
+            safe_chars = "() eqgtnl'"
+            encoded_filter = urllib.parse.quote(filter_query, safe=safe_chars)
+            apply_clause = f"filter({encoded_filter})/aggregate({numeric_field} with {odata_agg} as {alias})"
+        else:
+            apply_clause = f"aggregate({numeric_field} with {odata_agg} as {alias})"
         
         path = f"{entity_set}?$apply={apply_clause}"
         

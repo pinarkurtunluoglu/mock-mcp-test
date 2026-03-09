@@ -212,11 +212,11 @@ async def calculate_inventory_totals(
             # For virtual entities, doing this sequentially is safer
             
             # GET SUM
-            sum_res = await client.aggregate_table(ENTITY_SET, field, "sum")
+            sum_res = await client.aggregate_table(ENTITY_SET, field, "sum", filter_query=filter_query)
             total_sum = sum_res.get(f"{field}_sum", 0)
             
             # GET AVERAGE
-            avg_res = await client.aggregate_table(ENTITY_SET, field, "average")
+            avg_res = await client.aggregate_table(ENTITY_SET, field, "average", filter_query=filter_query)
             total_avg = avg_res.get(f"{field}_average", 0)
             
             results.append(f"- **{field}**: Sum: `{total_sum:,.2f}` | Average: `{total_avg:,.2f}`")
