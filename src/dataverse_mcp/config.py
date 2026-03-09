@@ -27,10 +27,26 @@ class Settings(BaseSettings):
     )
 
     # ── MCP Server ───────────────────────────────────────
-    mcp_server_name: str = Field(default="mock-mcp-test", description="MCP server name")
+    mcp_server_name: str = Field(default="dataverse-mcp", description="MCP server name")
     mcp_transport: TransportType = Field(default=TransportType.SSE, description="MCP transport type")
     mcp_host: str = Field(default="0.0.0.0", description="HTTP server host")
     mcp_port: int = Field(default=8080, ge=1, le=65535, description="HTTP server port")
+
+    # ── Dataverse / Azure AD ─────────────────────────────
+    dataverse_url: str = Field(..., description="Dataverse environment URL (e.g. https://org.crm.dynamics.com)")
+    client_id: str = Field(..., description="Azure AD Application (client) ID")
+    client_secret: str = Field(..., description="Azure AD Client Secret")
+    tenant_id: str = Field(..., description="Azure AD Directory (tenant) ID")
+
+    # ── Target Entity ────────────────────────────────────
+    entity_set_name: str = Field(
+        default="mserp_tryaiinventoryagingreportentities",
+        description="Dataverse entity set name (plural, used in API URLs)"
+    )
+    entity_logical_name: str = Field(
+        default="mserp_tryaiinventoryagingreportentity",
+        description="Dataverse entity logical name (singular, used for schema queries)"
+    )
 
     # ── Data Processing ──────────────────────────────────
     max_page_size: int = Field(default=500, ge=1, le=5000)
@@ -45,6 +61,10 @@ class Settings(BaseSettings):
         default="",
         description="Comma-separated list of allowed tables (empty for all)"
     )
+
+    def validate_azure_config(self) -> bool:
+        """Returns True if all required Azure AD fields are present."""
+        return all([self.dataverse_url, self.client_id, self.client_secret, self.tenant_id])
 
 
 def get_settings() -> Settings:

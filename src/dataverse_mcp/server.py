@@ -1,7 +1,7 @@
-"""FastMCP Server — Hyperion Mining Mock Version.
+"""FastMCP Server — Dataverse Inventory Aging Report.
 
-Defines 6 Tools, 2 Resources, and 2 Prompts.
-This version IS HARDCODED to use mock data for verification.
+Provides specialized MCP tools for the mserp_tryaiinventoryagingreportentities entity
+from the Tiryaki Operations Dataverse environment.
 """
 
 from __future__ import annotations
@@ -10,171 +10,171 @@ import os
 import structlog
 from fastmcp import FastMCP
 
-# ── Auth Disable for Mock Version ──────────────────────
-# Completely remove auth token to disable mandatory Bearer check
-# Doing this before mcp initialization is critical
+# ── Auth Disable ───────────────────────────────────────
 os.environ.pop("FASTMCP_AUTH_TOKEN", None)
 
 from dataverse_mcp.config import get_settings
 from dataverse_mcp.services.formatter import DataFormatter
 from dataverse_mcp.services.summarizer import DataSummarizer
-from dataverse_mcp.mock_client import MockDataverseClient
+from dataverse_mcp.client import DataverseClient
 
 logger = structlog.get_logger(__name__)
 
 # ── Settings & Dependencies ─────────────────────────────
 settings = get_settings()
 
+ENTITY_SET = settings.entity_set_name
+ENTITY_LOGICAL = settings.entity_logical_name
+
 mcp = FastMCP(
     name=settings.mcp_server_name,
     instructions=(
-        "This is a specialized MOCK version of the Dataverse MCP server. "
-        "It uses the fictional 'Hyperion Mining' dataset for verification. "
-        "No real Dataverse connection is used."
+        "This is an MCP server for querying Inventory Aging Report data from Microsoft Dataverse. "
+        "It provides tools to list, query, filter, search, and summarize records from the "
+        f"'{ENTITY_SET}' entity. Use these tools to analyze inventory aging data."
     ),
 )
 
 # Initialize components
-client = MockDataverseClient()
+client = DataverseClient(
+    dataverse_url=settings.dataverse_url,
+    client_id=settings.client_id,
+    client_secret=settings.client_secret,
+    tenant_id=settings.tenant_id,
+)
 summarizer = DataSummarizer(max_tokens=settings.summary_max_tokens)
 formatter = DataFormatter()
 
 
-def _get_allowed_list() -> list[str]:
-    """Returns the list of allowed tables (whitelist)."""
-    if not settings.allowed_tables:
-        return []
-    return [t.strip() for t in settings.allowed_tables.split(",")]
-
-
-def _is_allowed(table_name_or_set: str) -> bool:
-    """Checks if the table is accessible based on the whitelist."""
-    allowed = _get_allowed_list()
-    if not allowed:
-        return True
-    return table_name_or_set in allowed
-
-
 # ═══════════════════════════════════════════════════════════
-# MCP TOOLS
+# MCP TOOLS — Inventory Aging Report
 # ═══════════════════════════════════════════════════════════
 
 
 @mcp.tool()
-async def list_tables() -> str:
-    """Lists fictional Hyperion Mining tables."""
+async def get_inventory_aging_schema() -> str:
+    """Returns the schema (columns and data types) of the Inventory Aging Report table.
+    Use this first to understand what fields are available before querying data."""
     try:
-        entities = await client.list_tables()
-        allowed = _get_allowed_list()
-        if allowed:
-            entities = [
-                e for e in entities
-                if e.get("LogicalName") in allowed or e.get("EntitySetName") in allowed
-            ]
-        return formatter.format_table_list(entities)
+        schema = await client.get_table_schema(ENTITY_LOGICAL)
+        return formatter.format_schema(schema)
     except Exception as e:
-        return f" Error: {e}"
+        return f"Error: {e}"
 
 
 @mcp.tool()
-async def query_table(
-    entity_set: str,
+async def get_inventory_aging_count() -> str:
+    """Returns the total number of records in the Inventory Aging Report table."""
+    try:
+        count = await client.get_record_count(ENTITY_SET)
+        return f"Total records in Inventory Aging Report: **{count:,}**"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+async def query_inventory_aging(
     select: str = "",
     filter_query: str = "",
     orderby: str = "",
-    top: int = 20,
+    top: int = 50,
 ) -> str:
-    """Fetches data from the fictional Hyperion tables."""
-    if not _is_allowed(entity_set):
-        return f" Error: Permission denied for table '{entity_set}'."
+    """Queries the Inventory Aging Report table with optional OData filters.
+
+    Args:
+        select: Comma-separated column names to return (e.g. 'mserp_itemid,mserp_quantity,mserp_amount').
+                Leave empty for all columns.
+        filter_query: OData $filter expression (e.g. "mserp_quantity gt 100").
+        orderby: OData $orderby expression (e.g. "mserp_amount desc").
+        top: Maximum number of records to return (default: 50, max: 500).
+    """
     try:
+        if top > 500:
+            top = 500
         records = await client.query_table(
-            entity_set,
+            ENTITY_SET,
             select=select or None,
             filter_query=filter_query or None,
             orderby=orderby or None,
             top=top,
         )
-        columns = select.split(",") if select else None
-        return formatter.format_records_table(records, columns=columns)
+        columns = [c.strip() for c in select.split(",")] if select else None
+        result = formatter.format_records_table(records, columns=columns)
+        return f"**Inventory Aging Report** — {len(records)} records returned\n\n{result}"
     except Exception as e:
-        return f" Error: {e}"
+        return f"Error: {e}"
 
 
 @mcp.tool()
-async def search_records(
-    entity_set: str,
+async def search_inventory_aging(
     search_field: str,
     search_term: str,
     select: str = "",
     top: int = 20,
 ) -> str:
-    """Searches for records in the fictional Hyperion database."""
-    if not _is_allowed(entity_set):
-        return f" Error: Permission denied for table '{entity_set}'."
+    """Searches the Inventory Aging Report for records matching a specific value in a field.
+
+    Args:
+        search_field: The column name to search in (e.g. 'mserp_itemid', 'mserp_name').
+        search_term: The value to search for (case-insensitive contains search).
+        select: Comma-separated column names to return. Leave empty for all columns.
+        top: Maximum number of results (default: 20).
+    """
     try:
         records = await client.search_records(
-            entity_set, search_field=search_field, search_term=search_term,
+            ENTITY_SET, search_field=search_field, search_term=search_term,
             select=select or None, top=top,
         )
-        return formatter.format_records_table(records)
+        result = formatter.format_records_table(records)
+        return f"**Search Results** — Found {len(records)} records where '{search_field}' contains '{search_term}'\n\n{result}"
     except Exception as e:
-        return f" Error: {e}"
+        return f"Error: {e}"
 
 
 @mcp.tool()
-async def get_record(
-    entity_set: str,
-    record_id: str,
-    select: str = "",
-    expand: str = "",
-) -> str:
-    """Retrieves a single record GUID from Hyperion database."""
-    if not _is_allowed(entity_set):
-        return f" Error: Permission denied for table '{entity_set}'."
+async def get_inventory_aging_record(record_id: str, select: str = "") -> str:
+    """Retrieves a single Inventory Aging Report record by its unique ID (GUID).
+
+    Args:
+        record_id: The GUID of the record to retrieve.
+        select: Comma-separated column names to return. Leave empty for all columns.
+    """
     try:
         record = await client.get_record(
-            entity_set, record_id, select=select or None, expand=expand or None,
+            ENTITY_SET, record_id, select=select or None,
         )
-        return formatter.format_record(record, table_name=entity_set)
+        return formatter.format_record(record, table_name="Inventory Aging Report")
     except Exception as e:
-        return f" Error: {e}"
+        return f"Error: {e}"
 
 
 @mcp.tool()
-async def get_table_stats(entity_set: str, table_logical_name: str) -> str:
-    """Returns statistics for the fictional Hyperion tables."""
-    if not _is_allowed(entity_set) and not _is_allowed(table_logical_name):
-        return f" Error: Permission denied for table '{entity_set}'."
-    try:
-        count = await client.get_record_count(entity_set)
-        schema = await client.get_table_schema(table_logical_name)
-        return summarizer.summarize_table_stats(count, table_logical_name, schema=schema)
-    except Exception as e:
-        return f" Error: {e}"
-
-
-@mcp.tool()
-async def summarize_table(
-    entity_set: str,
+async def summarize_inventory_aging(
     select: str = "",
     filter_query: str = "",
-    top: int = 100,
+    top: int = 200,
     sample_size: int = 5,
 ) -> str:
-    """Summarizes fictional Hyperion yields and staff data."""
-    if not _is_allowed(entity_set):
-        return f" Error: Permission denied for table '{entity_set}'."
+    """Generates a statistical summary of the Inventory Aging Report data.
+    Includes field distributions, numeric stats (min/max/avg), and sample records.
+
+    Args:
+        select: Comma-separated key fields to compute statistics on.
+        filter_query: OData $filter to narrow the data before summarizing.
+        top: Number of records to include in the analysis (default: 200).
+        sample_size: Number of sample records to show (default: 5).
+    """
     try:
         records = await client.query_table(
-            entity_set, select=select or None, filter_query=filter_query or None, top=top,
+            ENTITY_SET, select=select or None, filter_query=filter_query or None, top=top,
         )
-        key_fields = select.split(",") if select else None
+        key_fields = [c.strip() for c in select.split(",")] if select else None
         return summarizer.summarize_records(
-            records, table_name=entity_set, sample_size=sample_size, key_fields=key_fields,
+            records, table_name="Inventory Aging Report",
+            sample_size=sample_size, key_fields=key_fields,
         )
     except Exception as e:
-        return f" Error: {e}"
+        return f"Error: {e}"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -182,25 +182,10 @@ async def summarize_table(
 # ═══════════════════════════════════════════════════════════
 
 
-@mcp.resource("dataverse://tables")
-async def resource_tables() -> str:
-    """List of fictional Hyperion Mining tables."""
-    entities = await client.list_tables()
-    allowed = _get_allowed_list()
-    if allowed:
-        entities = [
-            e for e in entities
-            if e.get("LogicalName") in allowed or e.get("EntitySetName") in allowed
-        ]
-    return formatter.format_table_list(entities)
-
-
-@mcp.resource("dataverse://schema/{table_name}")
-async def resource_schema(table_name: str) -> str:
-    """Schema for a fictional Hyperion table."""
-    if not _is_allowed(table_name):
-        return f" Error: Permission denied for schema '{table_name}'."
-    schema = await client.get_table_schema(table_name)
+@mcp.resource("dataverse://inventory-aging/schema")
+async def resource_inventory_aging_schema() -> str:
+    """Schema of the Inventory Aging Report entity."""
+    schema = await client.get_table_schema(ENTITY_LOGICAL)
     return formatter.format_schema(schema)
 
 
@@ -210,28 +195,31 @@ async def resource_schema(table_name: str) -> str:
 
 
 @mcp.prompt()
-def analyze_data(table_name: str, analysis_goal: str = "general analysis") -> str:
-    """Prompt template for analyzing Hyperion Mining data."""
-    return f"""Please analyze the fictional '{table_name}' table from Hyperion Mining.
+def analyze_inventory_aging(analysis_goal: str = "genel analiz") -> str:
+    """Prompt template for analyzing inventory aging data."""
+    return f"""Lütfen Envanter Yaşlandırma Raporu (Inventory Aging Report) verilerini analiz edin.
 
-Analysis Goal: {analysis_goal}
+Analiz Hedefi: {analysis_goal}
 
-Steps:
-1. First, check available tables using `list_tables`.
-2. Use `get_table_stats` to understand the scale of the site.
-3. Use `summarize_table` to get yield summaries.
-4. If necessary, fetch detailed data with `query_table`.
-5. Summarize your findings and recommendations for the CEO.
+Adımlar:
+1. Önce `get_inventory_aging_schema` ile tablo yapısını inceleyin.
+2. `get_inventory_aging_count` ile toplam kayıt sayısını öğrenin.
+3. `summarize_inventory_aging` ile istatistiksel özet alın.
+4. Gerekirse `query_inventory_aging` ile detaylı veri çekin.
+5. Bulgularınızı ve önerilerinizi özetleyin.
 
-All answers should be in English."""
+Yanıtlarınızı Türkçe verin."""
 
 
 @mcp.prompt()
-def compare_records(table_name: str, record_id_1: str, record_id_2: str) -> str:
-    """Prompt template for comparing Hyperion yield logs or staff."""
-    return f"""Please compare these two fictional records in the '{table_name}' table:
+def filter_aging_items(min_days: str = "90", field_name: str = "mserp_quantity") -> str:
+    """Prompt template for filtering aged inventory items."""
+    return f"""Envanter Yaşlandırma Raporundan {min_days} günden eski kalemleri analiz edin.
 
-Record 1: {record_id_1}
-Record 2: {record_id_2}
+Adımlar:
+1. `get_inventory_aging_schema` ile hangi alanların mevcut olduğunu kontrol edin.
+2. `query_inventory_aging` ile uygun filtreler kullanarak verileri çekin.
+3. `{field_name}` alanına göre sıralayarak en kritik kalemleri belirleyin.
+4. Sonuçları ve tavsiyeleri özetleyin.
 
-Provide your response in English."""
+Yanıtlarınızı Türkçe verin."""

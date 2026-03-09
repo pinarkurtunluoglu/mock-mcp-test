@@ -54,7 +54,11 @@ def main() -> None:
     from dataverse_mcp.server import mcp
 
     # Run with the configured transport (stdio or sse)
-    mcp.run(transport=settings.mcp_transport.value)
+    mcp.run(
+        transport=settings.mcp_transport.value,
+        host=settings.mcp_host,
+        port=settings.mcp_port,
+    )
 
 
 if __name__ == "__main__":
