@@ -172,12 +172,14 @@ class DataverseClient:
         if filter_query:
             safe_chars = "() eqgtnl'"
             encoded_filter = urllib.parse.quote(filter_query, safe=safe_chars)
-            aggregate_expr = f"filter({encoded_filter})/{aggregate_expr}"
+            filter_prefix = f"filter({encoded_filter})/"
+        else:
+            filter_prefix = ""
         
         if group_by:
-            apply_clause = f"groupby(({group_by}),{aggregate_expr})"
+            apply_clause = f"{filter_prefix}groupby(({group_by}),{aggregate_expr})"
         else:
-            apply_clause = aggregate_expr
+            apply_clause = f"{filter_prefix}{aggregate_expr}"
         
         path = f"{entity_set}?$apply={apply_clause}"
         
