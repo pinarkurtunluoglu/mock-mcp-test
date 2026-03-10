@@ -41,7 +41,7 @@ mcp = FastMCP(
         "- AGING: 'mserp_purchfifo' (purchase FIFO days), 'mserp_purchlifo' (LIFO days)\n"
         "- SITE/WAREHOUSE: 'mserp_inventsitename' (site), 'mserp_inventlocationname' (warehouse)\n"
         "- COMPANY: 'mserp_companyname' (full name)\n"
-        "- ORIGIN: 'mserp_inventcolorid' (country of origin like RUS, TR)\n\n"
+        "- ORIGIN: 'mserp_inventcolorid' (country of origin like RUS, TR). Note: There is NO 'name' column for origin.\n\n"
         "TEXT SEARCH RULES (CRITICAL):\n"
         "- Name fields (`*name`) often contain Turkish text (e.g. 'BUĞDAY') and are case-sensitive.\n"
         "- NEVER use strict equality (`eq`) for Name fields. ALWAYS use OData `contains(...)`.\n"
