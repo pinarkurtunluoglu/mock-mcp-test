@@ -50,7 +50,9 @@ mcp = FastMCP(
         "  2. group_by='mserp_inventsiteid' → site breakdown\n"
         "  3. group_by='mserp_etgproductlevel03' → product category breakdown\n"
         "  4. group_by='mserp_headerreportdate' → time-based trend\n"
-        "  5. group_by='mserp_companyid,mserp_etgproductlevel03' → cross-dimensional analysis\n"
+        "- For cross-dimensional analysis, use filter_query to fix one dimension then group_by the other. "
+        "Example: filter_query=\"mserp_companyid eq 'mesq'\" + group_by='mserp_etgproductlevel03'.\n"
+        "- IMPORTANT: group_by only supports ONE column at a time. NEVER pass multiple columns.\n"
         "- Combine results from multiple calls to produce comprehensive insights.\n"
         "- 'summarize_inventory_aging' only analyzes a SAMPLE (max 5000 rows), NOT the full dataset. "
         "Use it ONLY for showing example records, NEVER for calculating totals or insights."
@@ -242,10 +244,10 @@ async def calculate_inventory_totals(
     Args:
         numeric_field: The numeric column to aggregate (e.g. 'mserp_qty', 'mserp_purchfifo'). Leave empty for 'count'.
         agg_type: Aggregation type: 'sum', 'average', 'min', 'max', or 'count'.
-        group_by: Column(s) to group by. Supports multiple columns separated by comma
-                  (e.g. 'mserp_companyid,mserp_etgproductlevel03' for cross-dimensional analysis).
+        group_by: ONE column to group results by (only single column supported).
                   Common values: 'mserp_inventsiteid', 'mserp_companyid', 'mserp_etgproductlevel03',
-                  'mserp_headerreportdate', 'mserp_inventcolorid'.
+                  'mserp_headerreportdate', 'mserp_inventcolorid', 'mserp_itemname'.
+                  For cross-dimensional analysis, use filter_query to fix one dimension and group_by the other.
         filter_query: (Optional) OData $filter to narrow data before aggregating
                       (e.g. "mserp_etgproductlevel03 eq 'WHEAT'" or "contains(mserp_itemname,'BUGDAY')").
     """
