@@ -157,7 +157,9 @@ async def search_inventory_aging(
     """Searches the Inventory Aging Report for records matching a specific value in a field.
 
     Args:
-        search_field: The column name to search in (e.g. 'mserp_itemid', 'mserp_name').
+        search_field: The column name to search in. 
+                      CRITICAL: Always prefer Name columns over ID columns (e.g. use 'mserp_inventsitename' 
+                      instead of 'mserp_inventsiteid', 'mserp_companyname' instead of 'mserp_companyid').
         search_term: The value to search for (case-insensitive contains search).
         select: Comma-separated column names to return. Leave empty for all columns.
         top: Maximum number of results (default: 20).
