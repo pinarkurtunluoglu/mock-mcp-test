@@ -31,7 +31,17 @@ mcp = FastMCP(
     instructions=(
         "This is an MCP server for querying Inventory Aging Report data from Microsoft Dataverse. "
         "It provides tools to list, query, filter, search, and summarize records from the "
-        f"'{ENTITY_SET}' entity. Use these tools to analyze inventory aging data."
+        f"'{ENTITY_SET}' entity. Use these tools to analyze inventory aging data.\n\n"
+        "IMPORTANT FIELD NOTES:\n"
+        "- DATE FIELD: Always use 'mserp_headerreportdate' for date filtering. "
+        "'mserp_reportdate' is mostly NULL and should be ignored.\n"
+        "- PRODUCT NAME: 'mserp_itemname' (full name), 'mserp_itemid' (code like 10IQ4112)\n"
+        "- PRODUCT CATEGORY: 'mserp_etgproductlevel03' (e.g. 'WHEAT', 'CORN')\n"
+        "- QUANTITY: 'mserp_qty' (inventory quantity)\n"
+        "- SITE/WAREHOUSE: 'mserp_inventsiteid' (site), 'mserp_inventlocationid' (warehouse)\n"
+        "- COMPANY: 'mserp_companyid' (code), 'mserp_companyname' (full name)\n"
+        "- ORIGIN: 'mserp_inventcolorid' (country of origin like RUS, TR)\n"
+        "- For TOTALS/SUMS/COUNTS, ALWAYS use 'calculate_inventory_totals' tool, NEVER 'query_inventory_aging'."
     ),
 )
 
