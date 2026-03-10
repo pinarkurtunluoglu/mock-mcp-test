@@ -36,12 +36,16 @@ mcp = FastMCP(
         "- DATE FIELD: Always use 'mserp_headerreportdate' for date filtering. "
         "'mserp_reportdate' is mostly NULL and should be ignored.\n"
         "- PRODUCT NAME: 'mserp_itemname' (full name), 'mserp_itemid' (code like 10IQ4112)\n"
-        "- PRODUCT CATEGORY: 'mserp_etgproductlevel03name' (e.g. 'WHEAT', 'CORN')\n"
+        "- PRODUCT CATEGORY: 'mserp_etgproductlevel03name' (e.g. 'BUĞDAY', 'MISIR')\n"
         "- QUANTITY: 'mserp_qty' (inventory quantity)\n"
         "- AGING: 'mserp_purchfifo' (purchase FIFO days), 'mserp_purchlifo' (LIFO days)\n"
         "- SITE/WAREHOUSE: 'mserp_inventsitename' (site), 'mserp_inventlocationname' (warehouse)\n"
         "- COMPANY: 'mserp_companyname' (full name)\n"
         "- ORIGIN: 'mserp_inventcolorid' (country of origin like RUS, TR)\n\n"
+        "TEXT SEARCH RULES (CRITICAL):\n"
+        "- Name fields (`*name`) often contain Turkish text (e.g. 'BUĞDAY') and are case-sensitive.\n"
+        "- NEVER use strict equality (`eq`) for Name fields. ALWAYS use OData `contains(...)`.\n"
+        "- Example: `contains(mserp_etgproductlevel03name, 'BUĞDAY')` instead of `mserp_etgproductlevel03name eq 'BUĞDAY'`\n\n"
         "ANALYSIS RULES:\n"
         "- For TOTALS/SUMS/COUNTS/INSIGHTS, ALWAYS use 'calculate_inventory_totals', NEVER 'query_inventory_aging' or 'summarize_inventory_aging'.\n"
         "- For INSIGHTS and TRENDS, call 'calculate_inventory_totals' MULTIPLE TIMES with different group_by values "
@@ -51,7 +55,7 @@ mcp = FastMCP(
         "  3. group_by='mserp_etgproductlevel03name' → product category breakdown\n"
         "  4. group_by='mserp_headerreportdate' → time-based trend\n"
         "- For cross-dimensional analysis, use filter_query to fix one dimension then group_by the other. "
-        "Example: filter_query=\"mserp_companyname eq 'mesq'\" + group_by='mserp_etgproductlevel03'.\n"
+        "Example: filter_query=\"contains(mserp_companyname, 'mesq')\" + group_by='mserp_etgproductlevel03name'.\n"
         "- IMPORTANT: group_by only supports ONE column at a time. NEVER pass multiple columns.\n"
         "- Combine results from multiple calls to produce comprehensive insights.\n"
         "- 'summarize_inventory_aging' only analyzes a SAMPLE (max 5000 rows), NOT the full dataset. "
@@ -111,7 +115,7 @@ async def query_inventory_aging(
     Args:
         select: Comma-separated column names to return (e.g. 'mserp_itemid,mserp_qty,mserp_amountmst').
                 Leave empty for all columns.
-        filter_query: OData $filter expression (e.g. "mserp_itemname eq 'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA'").
+        filter_query: OData $filter expression (e.g. "contains(mserp_itemname, 'BUĞDAY TOHUMU')").
         orderby: OData $orderby expression (e.g. "mserp_amountmst desc").
         top: Maximum number of raw records to return (default: 50, max: 500).
     """
@@ -251,7 +255,7 @@ async def calculate_inventory_totals(
                   'mserp_headerreportdate', 'mserp_inventcolorid', 'mserp_itemname'.
                   For cross-dimensional analysis, use filter_query to fix one dimension and group_by the other.
         filter_query: (Optional) OData $filter to narrow data before aggregating
-                      (e.g. "mserp_etgproductlevel03 eq 'WHEAT'" or "contains(mserp_itemname,'BUGDAY')").
+                      (e.g. "contains(mserp_etgproductlevel03name, 'BUĞDAY')" or "contains(mserp_itemname,'BUĞDAY')").
     """
     try:
         result = await client.aggregate_table(
