@@ -205,23 +205,25 @@ async def summarize_inventory_aging(
 
 @mcp.tool()
 async def calculate_inventory_totals(
-    numeric_field: str = "mserp_qty",
+    numeric_field: str = "",
     agg_type: str = "sum",
     group_by: str = "",
     filter_query: str = "",
 ) -> str:
-    """Calculates totals, averages, min, or max for a numeric field across the ENTIRE dataset (500k+ records).
+    """Calculates totals, averages, min, max, or COUNT across the ENTIRE dataset (500k+ records).
     Uses Dataverse server-side aggregation (Query Pushdown) — no rows are downloaded.
 
     CRITICAL: ALWAYS use this tool instead of query_inventory_aging when the user asks for
-    totals, sums, averages, or any calculation across many records.
+    totals, sums, averages, counts, or any calculation across many records.
+    For counting filtered records (e.g. "Buğday kaydı kaç tane?"), use agg_type='count'.
 
     Args:
-        numeric_field: The numeric column to aggregate (e.g. 'mserp_qty', 'mserp_amountmst').
-        agg_type: Aggregation type: 'sum', 'average', 'min', or 'max'.
+        numeric_field: The numeric column to aggregate (e.g. 'mserp_qty'). Leave empty for 'count'.
+        agg_type: Aggregation type: 'sum', 'average', 'min', 'max', or 'count'.
         group_by: (Optional) Column to group results by (e.g. 'mserp_inventsiteid' for per-site totals,
                   'mserp_companyid' for per-company totals, 'mserp_itemname' for per-product totals).
-        filter_query: (Optional) OData $filter to narrow data before aggregating.
+        filter_query: (Optional) OData $filter to narrow data before aggregating
+                      (e.g. "mserp_etgproductlevel03 eq 'WHEAT'" or "contains(mserp_itemname,'BUGDAY')").
     """
     try:
         result = await client.aggregate_table(
@@ -229,12 +231,19 @@ async def calculate_inventory_totals(
             filter_query=filter_query, group_by=group_by,
         )
         
-        alias = f"{numeric_field}_{agg_type}"
+        # Determine alias based on agg type
+        if agg_type.lower() == "count":
+            alias = "record_count"
+            label = "Record Count"
+        else:
+            alias = f"{numeric_field}_{agg_type}"
+            label = f"{numeric_field} ({agg_type})"
+        
         header = f"### Server-Side Aggregation (Query Pushdown — no rows downloaded)"
         
         if group_by and isinstance(result, list):
             # Grouped results → format as table
-            lines = [header, f"\n| {group_by} | {numeric_field} ({agg_type}) |", "| --- | --- |"]
+            lines = [header, f"\n| {group_by} | {label} |", "| --- | --- |"]
             for row in result:
                 group_val = row.get(group_by, "N/A")
                 agg_val = row.get(alias, 0)
@@ -243,7 +252,7 @@ async def calculate_inventory_totals(
         else:
             # Single result
             value = result.get(alias, 0) if isinstance(result, dict) else 0
-            detail = f"- **{numeric_field}** ({agg_type}): `{value:,.2f}`"
+            detail = f"- **{label}**: `{value:,.2f}`"
             if filter_query:
                 detail += f"\n- Filter: `{filter_query}`"
             return f"{header}\n{detail}"

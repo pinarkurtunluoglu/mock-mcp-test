@@ -141,28 +141,33 @@ class DataverseClient:
                 
         return all_records[:max_records]
 
-    async def aggregate_table(self, entity_set: str, numeric_field: str, agg_type: str = "sum", filter_query: str = "", group_by: str = "") -> dict[str, Any] | list[dict[str, Any]]:
-        """Performs server-side aggregation (Sum, Avg, Min, Max) on a numeric field using $apply.
+    async def aggregate_table(self, entity_set: str, numeric_field: str = "", agg_type: str = "sum", filter_query: str = "", group_by: str = "") -> dict[str, Any] | list[dict[str, Any]]:
+        """Performs server-side aggregation (Sum, Avg, Min, Max, Count) on a field using $apply.
         
         Args:
             entity_set: The table to query.
-            numeric_field: The column name to aggregate (e.g., 'mserp_qty').
-            agg_type: The type of aggregation ('sum', 'average', 'min', 'max').
+            numeric_field: The column name to aggregate. Not required for 'count'.
+            agg_type: The type of aggregation ('sum', 'average', 'min', 'max', 'count').
             filter_query: Optional OData filter to apply before aggregating.
-            group_by: Optional field to group results by (e.g., 'mserp_inventsiteid').
+            group_by: Optional field to group results by.
             
         Returns:
             A dict (or list of dicts if group_by) containing the aggregated result(s).
         """
-        # Ensure correct OData aggregate function names
-        valid_aggs = {"sum": "sum", "avg": "average", "average": "average", "min": "min", "max": "max"}
+        # Handle count separately — it uses $count instead of field aggregation
+        valid_aggs = {"sum": "sum", "avg": "average", "average": "average", "min": "min", "max": "max", "count": "count"}
         odata_agg = valid_aggs.get(agg_type.lower())
         if not odata_agg:
             raise ValueError(f"Unsupported aggregation type: {agg_type}")
 
-        # Construct $apply=aggregate(field with agg_type as alias)
-        alias = f"{numeric_field}_{odata_agg}"
-        aggregate_expr = f"aggregate({numeric_field} with {odata_agg} as {alias})"
+        if odata_agg == "count":
+            alias = "record_count"
+            aggregate_expr = f"aggregate($count as {alias})"
+        else:
+            if not numeric_field:
+                raise ValueError("numeric_field is required for non-count aggregations")
+            alias = f"{numeric_field}_{odata_agg}"
+            aggregate_expr = f"aggregate({numeric_field} with {odata_agg} as {alias})"
         
         if filter_query:
             safe_chars = "() eqgtnl'"
