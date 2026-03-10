@@ -94,6 +94,13 @@ async def query_inventory_aging(
     try:
         if top > 500:
             top = 500
+        
+        # Get total count to inform AI about data completeness
+        try:
+            total_count = await client.get_record_count(ENTITY_SET)
+        except Exception:
+            total_count = None
+        
         records = await client.query_table(
             ENTITY_SET,
             select=select or None,
@@ -103,7 +110,15 @@ async def query_inventory_aging(
         )
         columns = [c.strip() for c in select.split(",")] if select else None
         result = formatter.format_records_table(records, columns=columns)
-        return f"**Inventory Aging Report** — {len(records)} records returned\n\n{result}"
+        
+        # Build response with completeness warning
+        header = f"**Inventory Aging Report** — Showing {len(records)} records"
+        if total_count and total_count > len(records):
+            header += f" out of {total_count:,} total"
+            header += f"\n\n> ⚠️ **Bu tabloda {total_count:,} kayıt var. Tamamını gösteremiyorum.** "
+            header += "Toplam, ortalama gibi hesaplamalar için `calculate_inventory_totals` tool'unu kullanın."
+        
+        return f"{header}\n\n{result}"
     except Exception as e:
         return f"Error: {e}"
 
@@ -190,40 +205,50 @@ async def summarize_inventory_aging(
 
 @mcp.tool()
 async def calculate_inventory_totals(
-    numeric_fields: str = "mserp_qty",
+    numeric_field: str = "mserp_qty",
+    agg_type: str = "sum",
+    group_by: str = "",
     filter_query: str = "",
 ) -> str:
-    """Calculates totals and averages for numeric fields instantly across the ENTIRE dataset (even 500k+ records).
-    This uses Dataverse server-side aggregation ($apply) and does not download rows.
-    Use this for high-level questions like 'Toplam miktar nedir?' or 'Tüm tablonun ortalaması nedir?'.
-    
-    CRITICAL INSTRUCTION: ALWAYS USE THIS TOOL if the user asks for the total quantity, sum, or average of a SPECIFIC product or category (by using the `filter_query`). DO NOT use `query_inventory_aging` for calculations.
+    """Calculates totals, averages, min, or max for a numeric field across the ENTIRE dataset (500k+ records).
+    Uses Dataverse server-side aggregation (Query Pushdown) — no rows are downloaded.
+
+    CRITICAL: ALWAYS use this tool instead of query_inventory_aging when the user asks for
+    totals, sums, averages, or any calculation across many records.
 
     Args:
-        numeric_fields: Comma-separated numeric column names (e.g. 'mserp_qty,mserp_amountmst').
-        filter_query: (Optional) OData $filter to narrow the data before aggregating (e.g. "mserp_itemname eq 'BUĞDAY TOHUMU - EKMEKLİK KRASUNIA ODESKA'").
+        numeric_field: The numeric column to aggregate (e.g. 'mserp_qty', 'mserp_amountmst').
+        agg_type: Aggregation type: 'sum', 'average', 'min', or 'max'.
+        group_by: (Optional) Column to group results by (e.g. 'mserp_inventsiteid' for per-site totals,
+                  'mserp_companyid' for per-company totals, 'mserp_itemname' for per-product totals).
+        filter_query: (Optional) OData $filter to narrow data before aggregating.
     """
     try:
-        fields = [f.strip() for f in numeric_fields.split(",")]
-        results = [f"### Server-Side Aggregated Totals (Processed ENTIRE dataset)"]
+        result = await client.aggregate_table(
+            ENTITY_SET, numeric_field, agg_type,
+            filter_query=filter_query, group_by=group_by,
+        )
         
-        for field in fields:
-            # We must apply filter_query to the aggregation if it exists
-            # For virtual entities, doing this sequentially is safer
-            
-            # GET SUM
-            sum_res = await client.aggregate_table(ENTITY_SET, field, "sum", filter_query=filter_query)
-            total_sum = sum_res.get(f"{field}_sum", 0)
-            
-            # GET AVERAGE
-            avg_res = await client.aggregate_table(ENTITY_SET, field, "average", filter_query=filter_query)
-            total_avg = avg_res.get(f"{field}_average", 0)
-            
-            results.append(f"- **{field}**: Sum: `{total_sum:,.2f}` | Average: `{total_avg:,.2f}`")
-                
-        return "\n".join(results)
+        alias = f"{numeric_field}_{agg_type}"
+        header = f"### Server-Side Aggregation (Query Pushdown — no rows downloaded)"
+        
+        if group_by and isinstance(result, list):
+            # Grouped results → format as table
+            lines = [header, f"\n| {group_by} | {numeric_field} ({agg_type}) |", "| --- | --- |"]
+            for row in result:
+                group_val = row.get(group_by, "N/A")
+                agg_val = row.get(alias, 0)
+                lines.append(f"| {group_val} | {agg_val:,.2f} |")
+            return "\n".join(lines)
+        else:
+            # Single result
+            value = result.get(alias, 0) if isinstance(result, dict) else 0
+            detail = f"- **{numeric_field}** ({agg_type}): `{value:,.2f}`"
+            if filter_query:
+                detail += f"\n- Filter: `{filter_query}`"
+            return f"{header}\n{detail}"
     except Exception as e:
-        return f"Error calculating totals via Server-Side Aggregation. Note: Not all virtual entities support $apply. Error: {e}"
+        return f"Error: Server-side aggregation failed. {e}"
 
 
 # ═══════════════════════════════════════════════════════════

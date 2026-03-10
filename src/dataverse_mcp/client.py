@@ -141,7 +141,7 @@ class DataverseClient:
                 
         return all_records[:max_records]
 
-    async def aggregate_table(self, entity_set: str, numeric_field: str, agg_type: str = "sum", filter_query: str = "") -> dict[str, Any]:
+    async def aggregate_table(self, entity_set: str, numeric_field: str, agg_type: str = "sum", filter_query: str = "", group_by: str = "") -> dict[str, Any] | list[dict[str, Any]]:
         """Performs server-side aggregation (Sum, Avg, Min, Max) on a numeric field using $apply.
         
         Args:
@@ -149,9 +149,10 @@ class DataverseClient:
             numeric_field: The column name to aggregate (e.g., 'mserp_qty').
             agg_type: The type of aggregation ('sum', 'average', 'min', 'max').
             filter_query: Optional OData filter to apply before aggregating.
+            group_by: Optional field to group results by (e.g., 'mserp_inventsiteid').
             
         Returns:
-            A dict containing the aggregated result.
+            A dict (or list of dicts if group_by) containing the aggregated result(s).
         """
         # Ensure correct OData aggregate function names
         valid_aggs = {"sum": "sum", "avg": "average", "average": "average", "min": "min", "max": "max"}
@@ -161,18 +162,25 @@ class DataverseClient:
 
         # Construct $apply=aggregate(field with agg_type as alias)
         alias = f"{numeric_field}_{odata_agg}"
+        aggregate_expr = f"aggregate({numeric_field} with {odata_agg} as {alias})"
         
         if filter_query:
             safe_chars = "() eqgtnl'"
             encoded_filter = urllib.parse.quote(filter_query, safe=safe_chars)
-            apply_clause = f"filter({encoded_filter})/aggregate({numeric_field} with {odata_agg} as {alias})"
+            aggregate_expr = f"filter({encoded_filter})/{aggregate_expr}"
+        
+        if group_by:
+            apply_clause = f"groupby(({group_by}),{aggregate_expr})"
         else:
-            apply_clause = f"aggregate({numeric_field} with {odata_agg} as {alias})"
+            apply_clause = aggregate_expr
         
         path = f"{entity_set}?$apply={apply_clause}"
         
         result = await self._request("GET", path)
         value_list = result.get("value", [])
+        
+        if group_by:
+            return value_list  # Return full list for grouped results
         
         if not value_list:
             return {alias: 0}
@@ -200,7 +208,7 @@ class DataverseClient:
         url = f"{self.api_url}/{path}"
         response = await self._http_client.get(url, headers={"Authorization": f"Bearer {token}"})
         response.raise_for_status()
-        return int(response.text)
+        return int(response.text.strip().lstrip('\ufeff'))
 
     async def search_records(self, entity_set: str, search_field: str, search_term: str, **kwargs) -> list[dict[str, Any]]:
         """Searches for records using a filter."""

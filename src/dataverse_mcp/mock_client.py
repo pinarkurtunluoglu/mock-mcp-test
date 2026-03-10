@@ -25,6 +25,7 @@ _MINING_SITES = [
     ("Hyperion-Gamma-5", "Nebula-X", "Aether-Dust", 5542.11),
     ("Hyperion-Zeta-1", "Outer-Rim", "Neutron-Strands", 0.0827),
     ("Deep-Core-Zero", "Unknown-Region", "Stable-Singularity", 1.0001),
+    ("Abandoned-Outpost-X", None, "Unknown", None),
 ]
 
 _ENGINEERS = [
