@@ -38,10 +38,22 @@ mcp = FastMCP(
         "- PRODUCT NAME: 'mserp_itemname' (full name), 'mserp_itemid' (code like 10IQ4112)\n"
         "- PRODUCT CATEGORY: 'mserp_etgproductlevel03' (e.g. 'WHEAT', 'CORN')\n"
         "- QUANTITY: 'mserp_qty' (inventory quantity)\n"
+        "- AGING: 'mserp_purchfifo' (purchase FIFO days), 'mserp_purchlifo' (LIFO days)\n"
         "- SITE/WAREHOUSE: 'mserp_inventsiteid' (site), 'mserp_inventlocationid' (warehouse)\n"
         "- COMPANY: 'mserp_companyid' (code), 'mserp_companyname' (full name)\n"
-        "- ORIGIN: 'mserp_inventcolorid' (country of origin like RUS, TR)\n"
-        "- For TOTALS/SUMS/COUNTS, ALWAYS use 'calculate_inventory_totals' tool, NEVER 'query_inventory_aging'."
+        "- ORIGIN: 'mserp_inventcolorid' (country of origin like RUS, TR)\n\n"
+        "ANALYSIS RULES:\n"
+        "- For TOTALS/SUMS/COUNTS/INSIGHTS, ALWAYS use 'calculate_inventory_totals', NEVER 'query_inventory_aging' or 'summarize_inventory_aging'.\n"
+        "- For INSIGHTS and TRENDS, call 'calculate_inventory_totals' MULTIPLE TIMES with different group_by values "
+        "to analyze the FULL dataset from multiple dimensions. Example sequence:\n"
+        "  1. group_by='mserp_companyid' → company breakdown\n"
+        "  2. group_by='mserp_inventsiteid' → site breakdown\n"
+        "  3. group_by='mserp_etgproductlevel03' → product category breakdown\n"
+        "  4. group_by='mserp_headerreportdate' → time-based trend\n"
+        "  5. group_by='mserp_companyid,mserp_etgproductlevel03' → cross-dimensional analysis\n"
+        "- Combine results from multiple calls to produce comprehensive insights.\n"
+        "- 'summarize_inventory_aging' only analyzes a SAMPLE (max 5000 rows), NOT the full dataset. "
+        "Use it ONLY for showing example records, NEVER for calculating totals or insights."
     ),
 )
 
@@ -125,7 +137,7 @@ async def query_inventory_aging(
         header = f"**Inventory Aging Report** — Showing {len(records)} records"
         if total_count and total_count > len(records):
             header += f" out of {total_count:,} total"
-            header += f"\n\n> ⚠️ **Bu tabloda {total_count:,} kayıt var. Tamamını gösteremiyorum.** "
+            header += f"\n\n> **Bu tabloda {total_count:,} kayıt var. Tamamını gösteremiyorum.** "
             header += "Toplam, ortalama gibi hesaplamalar için `calculate_inventory_totals` tool'unu kullanın."
         
         return f"{header}\n\n{result}"
@@ -223,15 +235,17 @@ async def calculate_inventory_totals(
     """Calculates totals, averages, min, max, or COUNT across the ENTIRE dataset (500k+ records).
     Uses Dataverse server-side aggregation (Query Pushdown) — no rows are downloaded.
 
-    CRITICAL: ALWAYS use this tool instead of query_inventory_aging when the user asks for
-    totals, sums, averages, counts, or any calculation across many records.
-    For counting filtered records (e.g. "Buğday kaydı kaç tane?"), use agg_type='count'.
+    CRITICAL: ALWAYS use this tool for insights, trends, and analysis. Call it MULTIPLE TIMES
+    with different group_by values to analyze different dimensions.
+    NEVER use 'summarize_inventory_aging' for insights — it only sees a tiny sample.
 
     Args:
-        numeric_field: The numeric column to aggregate (e.g. 'mserp_qty'). Leave empty for 'count'.
+        numeric_field: The numeric column to aggregate (e.g. 'mserp_qty', 'mserp_purchfifo'). Leave empty for 'count'.
         agg_type: Aggregation type: 'sum', 'average', 'min', 'max', or 'count'.
-        group_by: (Optional) Column to group results by (e.g. 'mserp_inventsiteid' for per-site totals,
-                  'mserp_companyid' for per-company totals, 'mserp_itemname' for per-product totals).
+        group_by: Column(s) to group by. Supports multiple columns separated by comma
+                  (e.g. 'mserp_companyid,mserp_etgproductlevel03' for cross-dimensional analysis).
+                  Common values: 'mserp_inventsiteid', 'mserp_companyid', 'mserp_etgproductlevel03',
+                  'mserp_headerreportdate', 'mserp_inventcolorid'.
         filter_query: (Optional) OData $filter to narrow data before aggregating
                       (e.g. "mserp_etgproductlevel03 eq 'WHEAT'" or "contains(mserp_itemname,'BUGDAY')").
     """
@@ -252,12 +266,15 @@ async def calculate_inventory_totals(
         header = f"### Server-Side Aggregation (Query Pushdown — no rows downloaded)"
         
         if group_by and isinstance(result, list):
-            # Grouped results → format as table
-            lines = [header, f"\n| {group_by} | {label} |", "| --- | --- |"]
+            # Grouped results → format as table (supports multi-column group_by)
+            group_cols = [c.strip() for c in group_by.split(",")]
+            col_headers = " | ".join(group_cols) + f" | {label}"
+            col_seps = " | ".join(["---"] * len(group_cols)) + " | ---"
+            lines = [header, f"\n| {col_headers} |", f"| {col_seps} |"]
             for row in result:
-                group_val = row.get(group_by, "N/A")
+                group_vals = " | ".join(str(row.get(c, "N/A")) for c in group_cols)
                 agg_val = row.get(alias, 0)
-                lines.append(f"| {group_val} | {agg_val:,.2f} |")
+                lines.append(f"| {group_vals} | {agg_val:,.2f} |")
             return "\n".join(lines)
         else:
             # Single result
