@@ -116,7 +116,7 @@ async def query_inventory_aging(
 
     Args:
         select: Comma-separated column names to return (e.g. 'mserp_itemid,mserp_qty,mserp_amountmst').
-                Leave empty for all columns.
+                Leave empty for all columns. NEVER use 'mserp_countryoforiginname' (it does not exist, use mserp_inventcolorid).
         filter_query: OData $filter expression (e.g. "contains(mserp_itemname, 'BUĞDAY TOHUMU')").
         orderby: OData $orderby expression (e.g. "mserp_amountmst desc").
         top: Maximum number of raw records to return (default: 50, max: 500).
@@ -210,6 +210,7 @@ async def summarize_inventory_aging(
 
     Args:
         select: Comma-separated key fields to compute statistics on (e.g. 'mserp_qty,mserp_itemname').
+                NEVER use 'mserp_countryoforiginname' (it does not exist, use mserp_inventcolorid).
         filter_query: OData $filter to narrow the data before summarizing.
         top: Number of records to include in the analysis (default: 2000, max: 5000).
         sample_size: Number of sample records to show (default: 5).
