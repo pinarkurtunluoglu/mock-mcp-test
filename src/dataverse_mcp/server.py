@@ -35,7 +35,7 @@ mcp = FastMCP(
         "IMPORTANT FIELD NOTES:\n"
         "- DATE FIELD: Always use 'mserp_headerreportdate' for date filtering. "
         "'mserp_reportdate' is mostly NULL and should be ignored.\n"
-        "- PRODUCT NAME: 'mserp_itemname' (full name), 'mserp_itemid' (code like 10IQ4112)\n"
+        "- PRODUCT NAME: 'mserp_itemname' (full name)"
         "- PRODUCT CATEGORY: 'mserp_etgproductlevel03name' (e.g. 'BUĞDAY', 'MISIR')\n"
         "- QUANTITY: 'mserp_qty' (inventory quantity)\n"
         "- AGING: 'mserp_purchfifo' (purchase FIFO days), 'mserp_purchlifo' (LIFO days)\n"
@@ -253,8 +253,8 @@ async def calculate_inventory_totals(
         numeric_field: The numeric column to aggregate (e.g. 'mserp_qty', 'mserp_purchfifo'). Leave empty for 'count'.
         agg_type: Aggregation type: 'sum', 'average', 'min', 'max', or 'count'.
         group_by: ONE column to group results by (only single column supported).
-                  Common values: 'mserp_inventsiteid', 'mserp_companyid', 'mserp_etgproductlevel03',
-                  'mserp_headerreportdate', 'mserp_inventcolorid', 'mserp_itemname'.
+                  Common values: 'mserp_inventsitename', 'mserp_companyname', 'mserp_etgproductlevel03name',
+                  'mserp_headerreportdate', 'mserp_itemname', 'mserp_inventcolorid' (Note: origin has no name column).
                   For cross-dimensional analysis, use filter_query to fix one dimension and group_by the other.
         filter_query: (Optional) OData $filter to narrow data before aggregating
                       (e.g. "contains(mserp_etgproductlevel03name, 'BUĞDAY')" or "contains(mserp_itemname,'BUĞDAY')").
