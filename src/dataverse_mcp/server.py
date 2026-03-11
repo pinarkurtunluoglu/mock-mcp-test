@@ -16,6 +16,7 @@ os.environ.pop("FASTMCP_AUTH_TOKEN", None)
 from dataverse_mcp.config import get_settings
 from dataverse_mcp.services.formatter import DataFormatter
 from dataverse_mcp.services.summarizer import DataSummarizer
+from dataverse_mcp.services.response_guard import guard
 from dataverse_mcp.client import DataverseClient
 
 logger = structlog.get_logger(__name__)
@@ -29,39 +30,79 @@ ENTITY_LOGICAL = settings.entity_logical_name
 mcp = FastMCP(
     name=settings.mcp_server_name,
     instructions=(
-        "This is an MCP server for querying Inventory Aging Report data from Microsoft Dataverse. "
-        "It provides tools to list, query, filter, search, and summarize records from the "
-        f"'{ENTITY_SET}' entity. Use these tools to analyze inventory aging data.\n\n"
-        "IMPORTANT FIELD NOTES:\n"
-        "- DATE FIELD: Always use 'mserp_headerreportdate' for date filtering. "
-        "'mserp_reportdate' is mostly NULL and should be ignored.\n"
-        "- PRODUCT NAME: 'mserp_itemname' (full name)"
-        "- PRODUCT CATEGORY: 'mserp_etgproductlevel03name' (e.g. 'BUĞDAY', 'MISIR')\n"
-        "- QUANTITY: 'mserp_qty' (inventory quantity)\n"
-        "- AGING: 'mserp_purchfifo' (purchase FIFO days), 'mserp_purchlifo' (LIFO days)\n"
-        "- SITE/WAREHOUSE: 'mserp_inventsitename' (site), 'mserp_inventlocationname' (warehouse)\n"
-        "- COMPANY: 'mserp_companyname' (full name)\n"
-        "- ORIGIN: 'mserp_inventcolorid' (country of origin like RUS, TR). Note: There is NO 'name' column for origin.\n\n"
-        "TEXT SEARCH RULES (CRITICAL):\n"
-        "- Name fields (`*name`) often contain Turkish text (e.g. 'BUĞDAY') and are case-sensitive.\n"
-        "- NEVER use strict equality (`eq`) for Name fields. ALWAYS use OData `contains(...)`.\n"
-        "- Example: `contains(mserp_etgproductlevel03name, 'BUĞDAY')` instead of `mserp_etgproductlevel03name eq 'BUĞDAY'`\n"
-        "- If user asks for 'ürün adı' (Product Name), ALWAYS search in 'mserp_itemname'.\n"
-        "- If user asks for 'kategori' / 'ürün grubu' (Product Category), ALWAYS search in 'mserp_etgproductlevel03name'.\n\n"
-        "ANALYSIS RULES:\n"
-        "- For TOTALS/SUMS/COUNTS/INSIGHTS, ALWAYS use 'calculate_inventory_totals', NEVER 'query_inventory_aging' or 'summarize_inventory_aging'.\n"
-        "- For INSIGHTS and TRENDS, call 'calculate_inventory_totals' MULTIPLE TIMES with different group_by values "
-        "to analyze the FULL dataset from multiple dimensions. Example sequence:\n"
-        "  1. group_by='mserp_companyname' → company breakdown\n"
-        "  2. group_by='mserp_inventsitename' → site breakdown\n"
-        "  3. group_by='mserp_etgproductlevel03name' → product category breakdown\n"
-        "  4. group_by='mserp_headerreportdate' → time-based trend\n"
-        "- For cross-dimensional analysis, use filter_query to fix one dimension then group_by the other. "
-        "Example: filter_query=\"contains(mserp_companyname, 'mesq')\" + group_by='mserp_etgproductlevel03name'.\n"
-        "- IMPORTANT: group_by only supports ONE column at a time. NEVER pass multiple columns.\n"
-        "- Combine results from multiple calls to produce comprehensive insights.\n"
-        "- 'summarize_inventory_aging' only analyzes a SAMPLE (max 5000 rows), NOT the full dataset. "
-        "Use it ONLY for showing example records, NEVER for calculating totals or insights."
+        # ── ROLE ──────────────────────────────────────────────
+        "You are a Senior Supply-Chain Data Analyst with deep expertise in inventory management. "
+        "You have access to the Tiryaki Group's Inventory Aging Report stored in Microsoft Dataverse "
+        f"(entity: '{ENTITY_SET}', ~500 000 records). "
+        "Always respond in the same language as the user's message (usually Turkish).\n\n"
+
+        # ── FIELD CATALOG ─────────────────────────────────────
+        "## Field Catalog (ALWAYS use these exact column names)\n"
+        "| Concept | Column Name | Notes |\n"
+        "|---|---|---|\n"
+        "| Product Name | mserp_itemname | Full product name (Turkish text) |\n"
+        "| Product Code | mserp_itemid | Short code like 10IQ4112 |\n"
+        "| Product Category | mserp_etgproductlevel03name | e.g. Wheat, Corn (mixed-case English) |\n"
+        "| Quantity | mserp_qty | Inventory quantity (numeric) |\n"
+        "| FIFO Age (days) | mserp_purchfifo | Days since purchase (FIFO) |\n"
+        "| LIFO Age (days) | mserp_purchlifo | Days since purchase (LIFO) |\n"
+        "| Report Date | mserp_headerreportdate | Use for ALL date filtering |\n"
+        "| Site / Facility | mserp_inventsitename | e.g. Gaziantep Tesisi, Vessel |\n"
+        "| Warehouse | mserp_inventlocationname | Sub-location within a site |\n"
+        "| Company | mserp_companyname | e.g. MESOPOTAMIA FZE IRAQ BRANCH |\n"
+        "| Country of Origin | mserp_inventcolorid | Short code like RUS, TR — NO name column exists |\n\n"
+
+        # ── TOOL SELECTION (Decision Matrix) ──────────────────
+        "## Tool Selection — ALWAYS pick the right tool\n"
+        "| User Intent | Correct Tool | Why |\n"
+        "|---|---|---|\n"
+        "| Totals, sums, averages, counts, insights, trends | calculate_inventory_totals | Server-side aggregation on FULL dataset |\n"
+        "| Compare groups (company vs company, site vs site) | calculate_inventory_totals (multiple calls) | Use different group_by per call |\n"
+        "| Cross-dimensional (e.g. category breakdown within one company) | calculate_inventory_totals with filter_query + group_by | filter fixes one dimension, group_by splits the other |\n"
+        "| View specific raw records, examples, samples | query_inventory_aging | Returns max 500 rows |\n"
+        "| Find a record by name/keyword | search_inventory_aging | Case-insensitive contains search |\n"
+        "| Statistical summary of a sample | summarize_inventory_aging | Only sees max 5000 rows — NEVER use for totals |\n"
+        "| Understand table structure | get_inventory_aging_schema | Returns columns and types |\n"
+        "| Get total record count | get_inventory_aging_count | Single number |\n\n"
+
+        # ── ODATA QUERY RULES ─────────────────────────────────
+        "## OData Query Rules\n"
+        "1. **Text search**: ALWAYS use `contains(column, 'value')`. NEVER use `eq` for text/name columns.\n"
+        "2. **Case sensitivity**: `contains()` is case-insensitive, so 'wheat', 'WHEAT', 'Wheat' all work.\n"
+        "3. **group_by limit**: Only ONE column per call. For multi-dimension analysis, make multiple calls.\n"
+        "4. **Numeric filters**: Use standard OData operators: `mserp_purchfifo gt 100`, `mserp_qty lt 500`.\n"
+        "5. **Date filters**: `mserp_headerreportdate ge 2024-01-01`.\n\n"
+
+        # ── FORBIDDEN PATTERNS ────────────────────────────────
+        "## Forbidden Patterns — NEVER do these\n"
+        "- NEVER use `mserp_countryoforiginname` — this column DOES NOT EXIST. Use `mserp_inventcolorid`.\n"
+        "- NEVER use `mserp_reportdate` — it is mostly NULL. Use `mserp_headerreportdate`.\n"
+        "- NEVER use `mserp_companyid` — use `mserp_companyname`.\n"
+        "- NEVER use `mserp_inventsiteid` — use `mserp_inventsitename`.\n"
+        "- NEVER use `mserp_etgproductlevel03` — use `mserp_etgproductlevel03name`.\n"
+        "- NEVER use `tolower()` or `toupper()` in OData — Virtual Entities reject these.\n"
+        "- NEVER calculate totals from `query_inventory_aging` or `summarize_inventory_aging` results.\n"
+        "- NEVER pass multiple columns to group_by.\n\n"
+
+        # ── TURKISH LANGUAGE MAPPING ──────────────────────────
+        "## Turkish → Column Mapping\n"
+        "When the user says:\n"
+        "- 'ürün adı' / 'ürün ismi' / 'malzeme' → search in `mserp_itemname`\n"
+        "- 'kategori' / 'ürün grubu' / 'ürün kategorisi' → search in `mserp_etgproductlevel03name`\n"
+        "- 'tesis' / 'depo' / 'site' → search in `mserp_inventsitename`\n"
+        "- 'şirket' / 'firma' → search in `mserp_companyname`\n"
+        "- 'menşei' / 'köken' / 'ülke' → search in `mserp_inventcolorid`\n"
+        "- 'yaş' / 'bekleme süresi' / 'stok yaşı' → use `mserp_purchfifo` or `mserp_purchlifo`\n"
+        "- 'miktar' / 'adet' / 'ton' → use `mserp_qty`\n\n"
+
+        # ── MULTI-STEP ANALYSIS WORKFLOW ──────────────────────
+        "## Multi-Step Analysis Workflow\n"
+        "For comprehensive insights, follow this pattern:\n"
+        "1. Call `calculate_inventory_totals` with group_by='mserp_companyname' → company breakdown\n"
+        "2. Call `calculate_inventory_totals` with group_by='mserp_inventsitename' → site breakdown\n"
+        "3. Call `calculate_inventory_totals` with group_by='mserp_etgproductlevel03name' → category breakdown\n"
+        "4. Combine and cross-reference all results to produce actionable insights.\n"
+        "5. If deeper drill-down is needed, use filter_query to fix one dimension, then group_by another.\n"
     ),
 )
 
@@ -87,7 +128,7 @@ async def get_inventory_aging_schema() -> str:
     Use this first to understand what fields are available before querying data."""
     try:
         schema = await client.get_table_schema(ENTITY_LOGICAL)
-        return formatter.format_schema(schema)
+        return guard(formatter.format_schema(schema))
     except Exception as e:
         return f"Error: {e}"
 
@@ -109,17 +150,14 @@ async def query_inventory_aging(
     orderby: str = "",
     top: int = 50,
 ) -> str:
-    """Queries the Inventory Aging Report table and returns raw records.
-    
-    WARNING: DO NOT use this tool to calculate totals or averages. It only returns a maximum of 500 records. 
-    If you need to calculate a total, sum, or average across many records, you MUST use the `calculate_inventory_totals` tool instead.
+    """Returns raw records from the Inventory Aging Report (max 500 rows).
+    Use ONLY for viewing specific records or examples — NEVER for calculating totals.
 
     Args:
-        select: Comma-separated column names to return (e.g. 'mserp_itemid,mserp_qty,mserp_amountmst').
-                Leave empty for all columns. NEVER use 'mserp_countryoforiginname' (it does not exist, use mserp_inventcolorid).
-        filter_query: OData $filter expression (e.g. "contains(mserp_itemname, 'BUĞDAY TOHUMU')").
-        orderby: OData $orderby expression (e.g. "mserp_amountmst desc").
-        top: Maximum number of raw records to return (default: 50, max: 500).
+        select: Comma-separated columns to return (e.g. 'mserp_itemname,mserp_qty'). Leave empty for all.
+        filter_query: OData $filter (e.g. "contains(mserp_itemname, 'BUĞDAY')").
+        orderby: OData $orderby (e.g. "mserp_qty desc").
+        top: Max records to return (default: 50, max: 500).
     """
     try:
         if top > 500:
@@ -148,7 +186,7 @@ async def query_inventory_aging(
             header += f"\n\n> **Bu tabloda {total_count:,} kayıt var. Tamamını gösteremiyorum.** "
             header += "Toplam, ortalama gibi hesaplamalar için `calculate_inventory_totals` tool'unu kullanın."
         
-        return f"{header}\n\n{result}"
+        return guard(f"{header}\n\n{result}")
     except Exception as e:
         return f"Error: {e}"
 
@@ -160,15 +198,14 @@ async def search_inventory_aging(
     select: str = "",
     top: int = 20,
 ) -> str:
-    """Searches the Inventory Aging Report for records matching a specific value in a field.
+    """Searches for records where a field contains the given term (case-insensitive).
+    Always use Name columns (e.g. mserp_companyname, NOT mserp_companyid).
 
     Args:
-        search_field: The column name to search in. 
-                      CRITICAL: Always prefer Name columns over ID columns (e.g. use 'mserp_inventsitename' 
-                      instead of 'mserp_inventsiteid', 'mserp_companyname' instead of 'mserp_companyid').
-        search_term: The value to search for (case-insensitive contains search).
-        select: Comma-separated column names to return. Leave empty for all columns.
-        top: Maximum number of results (default: 20).
+        search_field: Column to search in (e.g. 'mserp_itemname', 'mserp_companyname').
+        search_term: Value to search for (case-insensitive).
+        select: Comma-separated columns to return. Leave empty for all.
+        top: Max results (default: 20).
     """
     try:
         records = await client.search_records(
@@ -176,7 +213,7 @@ async def search_inventory_aging(
             select=select or None, top=top,
         )
         result = formatter.format_records_table(records)
-        return f"**Search Results** — Found {len(records)} records where '{search_field}' contains '{search_term}'\n\n{result}"
+        return guard(f"**Search Results** — Found {len(records)} records where '{search_field}' contains '{search_term}'\n\n{result}")
     except Exception as e:
         return f"Error: {e}"
 
@@ -205,15 +242,15 @@ async def summarize_inventory_aging(
     top: int = 2000,
     sample_size: int = 5,
 ) -> str:
-    """Generates a deep statistical summary of the Inventory Aging Report data.
-    Fetch up to 2000 records (default) to provide a representative view of the dataset.
+    """Generates a statistical summary from a SAMPLE of records (max 5000).
+    Use ONLY for showing patterns and examples — NEVER for calculating totals or insights.
+    For accurate totals, use calculate_inventory_totals instead.
 
     Args:
-        select: Comma-separated key fields to compute statistics on (e.g. 'mserp_qty,mserp_itemname').
-                NEVER use 'mserp_countryoforiginname' (it does not exist, use mserp_inventcolorid).
-        filter_query: OData $filter to narrow the data before summarizing.
-        top: Number of records to include in the analysis (default: 2000, max: 5000).
-        sample_size: Number of sample records to show (default: 5).
+        select: Comma-separated fields to analyze (e.g. 'mserp_qty,mserp_itemname').
+        filter_query: OData $filter to narrow data before sampling.
+        top: Sample size (default: 2000, max: 5000).
+        sample_size: Number of example records to display (default: 5).
     """
     try:
         # Cap at 5000 for safety but allow deep analysis
@@ -228,10 +265,11 @@ async def summarize_inventory_aging(
         )
         
         key_fields = [c.strip() for c in select.split(",")] if select else None
-        return summarizer.summarize_records(
+        result = summarizer.summarize_records(
             records, table_name="Inventory Aging Report",
             sample_size=sample_size, key_fields=key_fields,
         )
+        return guard(result)
     except Exception as e:
         return f"Error during large-scale summary: {e}"
 
@@ -242,23 +280,18 @@ async def calculate_inventory_totals(
     agg_type: str = "sum",
     group_by: str = "",
     filter_query: str = "",
+    top_n: int = 50,
 ) -> str:
-    """Calculates totals, averages, min, max, or COUNT across the ENTIRE dataset (500k+ records).
-    Uses Dataverse server-side aggregation (Query Pushdown) — no rows are downloaded.
-
-    CRITICAL: ALWAYS use this tool for insights, trends, and analysis. Call it MULTIPLE TIMES
-    with different group_by values to analyze different dimensions.
-    NEVER use 'summarize_inventory_aging' for insights — it only sees a tiny sample.
+    """Server-side aggregation across the ENTIRE dataset (~500k records). No rows downloaded.
+    THIS IS THE PRIMARY TOOL for all totals, averages, counts, trends, and insights.
+    Call MULTIPLE TIMES with different group_by values for multi-dimensional analysis.
 
     Args:
-        numeric_field: The numeric column to aggregate (e.g. 'mserp_qty', 'mserp_purchfifo'). Leave empty for 'count'.
-        agg_type: Aggregation type: 'sum', 'average', 'min', 'max', or 'count'.
-        group_by: ONE column to group results by (only single column supported).
-                  Common values: 'mserp_inventsitename', 'mserp_companyname', 'mserp_etgproductlevel03name',
-                  'mserp_headerreportdate', 'mserp_itemname', 'mserp_inventcolorid' (Note: origin has no name column).
-                  For cross-dimensional analysis, use filter_query to fix one dimension and group_by the other.
-        filter_query: (Optional) OData $filter to narrow data before aggregating
-                      (e.g. "contains(mserp_etgproductlevel03name, 'BUĞDAY')" or "contains(mserp_itemname,'BUĞDAY')").
+        numeric_field: Column to aggregate (e.g. 'mserp_qty', 'mserp_purchfifo'). Leave empty for count.
+        agg_type: One of: 'sum', 'average', 'min', 'max', 'count'.
+        group_by: ONE column to group by. See Field Catalog in instructions for valid names.
+        filter_query: OData $filter to narrow scope (e.g. "contains(mserp_companyname, 'MESQ')").
+        top_n: Max number of grouped rows to return, sorted by aggregate value (default: 50).
     """
     try:
         result = await client.aggregate_table(
@@ -277,16 +310,24 @@ async def calculate_inventory_totals(
         header = f"### Server-Side Aggregation (Query Pushdown — no rows downloaded)"
         
         if group_by and isinstance(result, list):
-            # Grouped results → format as table (supports multi-column group_by)
+            # Sort by aggregate value descending and cap at top_n
+            total_groups = len(result)
+            result.sort(key=lambda r: r.get(alias, 0), reverse=True)
+            display_result = result[:top_n]
+            
             group_cols = [c.strip() for c in group_by.split(",")]
             col_headers = " | ".join(group_cols) + f" | {label}"
             col_seps = " | ".join(["---"] * len(group_cols)) + " | ---"
             lines = [header, f"\n| {col_headers} |", f"| {col_seps} |"]
-            for row in result:
+            for row in display_result:
                 group_vals = " | ".join(str(row.get(c, "N/A")) for c in group_cols)
                 agg_val = row.get(alias, 0)
                 lines.append(f"| {group_vals} | {agg_val:,.2f} |")
-            return "\n".join(lines)
+            
+            if total_groups > top_n:
+                lines.append(f"\n> *...ve {total_groups - top_n} grup daha (toplam {total_groups} grup). Daha dar bir filtre kullanın.*")
+            
+            return guard("\n".join(lines))
         else:
             # Single result
             value = result.get(alias, 0) if isinstance(result, dict) else 0
@@ -323,24 +364,25 @@ def analyze_inventory_aging(analysis_goal: str = "genel analiz") -> str:
 Analiz Hedefi: {analysis_goal}
 
 Adımlar:
-1. Önce `get_inventory_aging_schema` ile tablo yapısını inceleyin.
-2. `get_inventory_aging_count` ile toplam kayıt sayısını öğrenin.
-3. `summarize_inventory_aging` ile istatistiksel özet alın.
-4. Gerekirse `query_inventory_aging` ile detaylı veri çekin.
-5. Bulgularınızı ve önerilerinizi özetleyin.
+1. `calculate_inventory_totals` ile şirket bazlı toplam miktarları hesaplayın (group_by='mserp_companyname').
+2. `calculate_inventory_totals` ile tesis bazlı dağılımı çıkarın (group_by='mserp_inventsitename').
+3. `calculate_inventory_totals` ile ürün kategorisi kırılımını alın (group_by='mserp_etgproductlevel03name').
+4. Gerekirse `query_inventory_aging` ile ham kayıt örnekleri getirin.
+5. Tüm sonuçları birleştirerek kapsamlı içgörüler ve öneriler sunun.
 
 Yanıtlarınızı Türkçe verin."""
 
 
 @mcp.prompt()
-def filter_aging_items(min_days: str = "90", field_name: str = "mserp_qty") -> str:
+def filter_aging_items(min_days: str = "90", field_name: str = "mserp_purchfifo") -> str:
     """Prompt template for filtering aged inventory items."""
     return f"""Envanter Yaşlandırma Raporundan {min_days} günden eski kalemleri analiz edin.
 
 Adımlar:
-1. `get_inventory_aging_schema` ile hangi alanların mevcut olduğunu kontrol edin.
-2. `query_inventory_aging` ile uygun filtreler kullanarak verileri çekin.
-3. `{field_name}` alanına göre sıralayarak en kritik kalemleri belirleyin.
+1. `calculate_inventory_totals` ile `{field_name} gt {min_days}` filtresi uygulayarak toplam kayıt sayısını bulun.
+2. `calculate_inventory_totals` ile aynı filtreyi uygulayıp şirket bazında kırılım çıkarın (group_by='mserp_companyname').
+3. `query_inventory_aging` ile en kritik 10 kalemi getirin (orderby='{field_name} desc', top=10).
 4. Sonuçları ve tavsiyeleri özetleyin.
 
 Yanıtlarınızı Türkçe verin."""
+

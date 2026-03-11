@@ -44,8 +44,8 @@ class DataSummarizer:
         parts.append(sample)
 
         result = "\n".join(parts)
-        if len(result) > 15000: # Larger limit for server-side
-            result = result[:15000] + "\n\n...(summary truncated due to size)"
+        if len(result) > 12000:  # Tuned for GPT-5.2 context window
+            result = result[:12000] + "\n\n...(summary truncated due to size)"
         
         return result
 
