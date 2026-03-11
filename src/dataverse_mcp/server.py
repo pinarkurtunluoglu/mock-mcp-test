@@ -55,14 +55,17 @@ mcp = FastMCP(
 
         # ── TOOL SELECTION (Decision Matrix) ──────────────────
         "## Tool Selection — ALWAYS pick the right tool\n"
+        "**CRITICAL RULE: When the user asks for 'toplam', 'ortalama', 'minimum', 'maximum', 'kaç kayıt', "
+        "'kaç gün', 'kaç ton' → you MUST use `calculate_inventory_totals` or `calculate_multi_metrics`. "
+        "NEVER use `summarize_inventory_aging` or `query_inventory_aging` for any calculation.**\n\n"
         "| User Intent | Correct Tool | Why |\n"
         "|---|---|---|\n"
         "| Totals, sums, averages, counts, insights, trends | calculate_inventory_totals | Server-side aggregation on FULL dataset |\n"
+        "| Multiple metrics at once (sum+avg+min+max+count) | calculate_multi_metrics | FASTEST - runs all 5 in PARALLEL, one call |\n"
         "| Compare groups (company vs company, site vs site) | calculate_inventory_totals (multiple calls) | Use different group_by per call |\n"
         "| Cross-dimensional (e.g. category breakdown within one company) | calculate_inventory_totals with filter_query + group_by | filter fixes one dimension, group_by splits the other |\n"
         "| View specific raw records, examples, samples | query_inventory_aging | Returns max 500 rows |\n"
         "| Find a record by name/keyword | search_inventory_aging | Case-insensitive contains search |\n"
-        "| Statistical summary of a sample | summarize_inventory_aging | Only sees max 5000 rows — NEVER use for totals |\n"
         "| Understand table structure | get_inventory_aging_schema | Returns columns and types |\n"
         "| Get total record count | get_inventory_aging_count | Single number |\n"
         "| Find the latest report date | get_latest_report_date | ALWAYS call first if no date specified |\n\n"
