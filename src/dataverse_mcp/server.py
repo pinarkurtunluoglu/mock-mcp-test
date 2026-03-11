@@ -6,6 +6,7 @@ from the Tiryaki Operations Dataverse environment.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import structlog
 from fastmcp import FastMCP

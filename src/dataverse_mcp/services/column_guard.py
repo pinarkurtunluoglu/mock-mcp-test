@@ -82,8 +82,8 @@ def fix_filter(filter_query: str) -> str:
     result = filter_query
     for wrong, correct in COLUMN_ALIASES.items():
         if correct in ALLOWED_COLUMNS:
-            # Replace whole-word matches only (case-insensitive)
-            pattern = re.compile(re.escape(wrong), re.IGNORECASE)
+            # Replace whole-word matches only (case-insensitive) using word boundaries
+            pattern = re.compile(rf"\b{re.escape(wrong)}\b", re.IGNORECASE)
             result = pattern.sub(correct, result)
     return result
 
