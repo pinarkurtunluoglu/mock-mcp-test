@@ -17,6 +17,7 @@ from dataverse_mcp.config import get_settings
 from dataverse_mcp.services.formatter import DataFormatter
 from dataverse_mcp.services.summarizer import DataSummarizer
 from dataverse_mcp.services.response_guard import guard
+from dataverse_mcp.services.column_guard import fix_select, fix_filter, fix_group_by, fix_column
 from dataverse_mcp.client import DataverseClient
 
 logger = structlog.get_logger(__name__)
@@ -176,8 +177,8 @@ async def query_inventory_aging(
         
         records = await client.query_table(
             ENTITY_SET,
-            select=select or None,
-            filter_query=filter_query or None,
+            select=fix_select(select) or None,
+            filter_query=fix_filter(filter_query) or None,
             orderby=orderby or None,
             top=top,
         )
@@ -214,8 +215,8 @@ async def search_inventory_aging(
     """
     try:
         records = await client.search_records(
-            ENTITY_SET, search_field=search_field, search_term=search_term,
-            select=select or None, top=top,
+            ENTITY_SET, search_field=fix_column(search_field), search_term=search_term,
+            select=fix_select(select) or None, top=top,
         )
         result = formatter.format_records_table(records)
         return guard(f"**Search Results** — Found {len(records)} records where '{search_field}' contains '{search_term}'\n\n{result}")
@@ -263,8 +264,8 @@ async def summarize_inventory_aging(
         
         records = await client.query_table(
             ENTITY_SET, 
-            select=select or None, 
-            filter_query=filter_query or None, 
+            select=fix_select(select) or None, 
+            filter_query=fix_filter(filter_query) or None, 
             fetch_all=True,
             max_records=actual_top
         )
@@ -299,6 +300,11 @@ async def calculate_inventory_totals(
         top_n: Max number of grouped rows to return, sorted by aggregate value (default: 50).
     """
     try:
+        # Auto-correct hallucinated column names
+        numeric_field = fix_column(numeric_field) if numeric_field else numeric_field
+        group_by = fix_group_by(group_by)
+        filter_query = fix_filter(filter_query)
+        
         result = await client.aggregate_table(
             ENTITY_SET, numeric_field, agg_type,
             filter_query=filter_query, group_by=group_by,
