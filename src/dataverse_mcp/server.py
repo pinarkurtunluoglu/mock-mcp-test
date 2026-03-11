@@ -75,11 +75,16 @@ mcp = FastMCP(
 
         # ── FORBIDDEN PATTERNS ────────────────────────────────
         "## Forbidden Patterns — NEVER do these\n"
-        "- NEVER use `mserp_countryoforiginname` — this column DOES NOT EXIST. Use `mserp_inventcolorid`.\n"
-        "- NEVER use `mserp_reportdate` — it is mostly NULL. Use `mserp_headerreportdate`.\n"
+        "- NEVER use `mserp_countryoforiginname` — DOES NOT EXIST. Use `mserp_inventcolorid`.\n"
+        "- NEVER use `mserp_site` — DOES NOT EXIST. Use `mserp_inventsitename`.\n"
+        "- NEVER use `mserp_company` — DOES NOT EXIST. Use `mserp_companyname`.\n"
+        "- NEVER use `mserp_warehouse` — DOES NOT EXIST. Use `mserp_inventlocationname`.\n"
+        "- NEVER use `mserp_product` or `mserp_productname` — DOES NOT EXIST. Use `mserp_itemname`.\n"
+        "- NEVER use `mserp_reportdate` — mostly NULL. Use `mserp_headerreportdate`.\n"
         "- NEVER use `mserp_companyid` — use `mserp_companyname`.\n"
         "- NEVER use `mserp_inventsiteid` — use `mserp_inventsitename`.\n"
         "- NEVER use `mserp_etgproductlevel03` — use `mserp_etgproductlevel03name`.\n"
+        "- NEVER invent or shorten column names. ONLY use exact names from the Field Catalog above.\n"
         "- NEVER use `tolower()` or `toupper()` in OData — Virtual Entities reject these.\n"
         "- NEVER calculate totals from `query_inventory_aging` or `summarize_inventory_aging` results.\n"
         "- NEVER pass multiple columns to group_by.\n\n"
