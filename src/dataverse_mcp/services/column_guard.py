@@ -43,6 +43,7 @@ COLUMN_ALIASES: dict[str, str] = {
     "mserp_product": "mserp_itemname",
     "mserp_productname": "mserp_itemname",
     "mserp_item": "mserp_itemname",
+    "mserp_itemnamename": "mserp_itemname",
     # Product Category
     "mserp_category": "mserp_etgproductlevel03name",
     "mserp_productcategory": "mserp_etgproductlevel03name",
