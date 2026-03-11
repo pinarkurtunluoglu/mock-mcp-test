@@ -64,7 +64,8 @@ mcp = FastMCP(
         "| Find a record by name/keyword | search_inventory_aging | Case-insensitive contains search |\n"
         "| Statistical summary of a sample | summarize_inventory_aging | Only sees max 5000 rows — NEVER use for totals |\n"
         "| Understand table structure | get_inventory_aging_schema | Returns columns and types |\n"
-        "| Get total record count | get_inventory_aging_count | Single number |\n\n"
+        "| Get total record count | get_inventory_aging_count | Single number |\n"
+        "| Find the latest report date | get_latest_report_date | ALWAYS call first if no date specified |\n\n"
 
         # ── ODATA QUERY RULES ─────────────────────────────────
         "## OData Query Rules\n"
@@ -72,7 +73,16 @@ mcp = FastMCP(
         "2. **Case sensitivity**: `contains()` is case-insensitive, so 'wheat', 'WHEAT', 'Wheat' all work.\n"
         "3. **group_by limit**: Only ONE column per call. For multi-dimension analysis, make multiple calls.\n"
         "4. **Numeric filters**: Use standard OData operators: `mserp_purchfifo gt 100`, `mserp_qty lt 500`.\n"
-        "5. **Date filters**: `mserp_headerreportdate ge 2024-01-01`.\n\n"
+        "5. **Date filters**: `mserp_headerreportdate ge 2024-01-01`.\n"
+        "6. **Datetime groupby**: NEVER use group_by on `mserp_headerreportdate` — Dataverse rejects groupby on datetime fields.\n\n"
+
+        # ── DATE AWARENESS ────────────────────────────────────
+        "## Date Awareness — CRITICAL\n"
+        "The data contains MULTIPLE report dates. If the user does NOT specify a date:\n"
+        "1. FIRST call `get_latest_report_date` to find the most recent report date.\n"
+        "2. THEN add `mserp_headerreportdate eq <latest_date>` to your filter_query.\n"
+        "3. This ensures you analyze the LATEST snapshot, not a mix of old and new data.\n"
+        "Example: filter_query=\"mserp_headerreportdate eq 2026-03-07\"\n\n"
 
         # ── FORBIDDEN PATTERNS ────────────────────────────────
         "## Forbidden Patterns — NEVER do these\n"
@@ -87,6 +97,7 @@ mcp = FastMCP(
         "- NEVER use `mserp_etgproductlevel03` — use `mserp_etgproductlevel03name`.\n"
         "- NEVER invent or shorten column names. ONLY use exact names from the Field Catalog above.\n"
         "- NEVER use `tolower()` or `toupper()` in OData — Virtual Entities reject these.\n"
+        "- NEVER use group_by on `mserp_headerreportdate` — Dataverse rejects groupby on datetime fields.\n"
         "- NEVER calculate totals from `query_inventory_aging` or `summarize_inventory_aging` results.\n"
         "- NEVER pass multiple columns to group_by.\n\n"
 
@@ -104,11 +115,12 @@ mcp = FastMCP(
         # ── MULTI-STEP ANALYSIS WORKFLOW ──────────────────────
         "## Multi-Step Analysis Workflow\n"
         "For comprehensive insights, follow this pattern:\n"
-        "1. Call `calculate_inventory_totals` with group_by='mserp_companyname' → company breakdown\n"
-        "2. Call `calculate_inventory_totals` with group_by='mserp_inventsitename' → site breakdown\n"
-        "3. Call `calculate_inventory_totals` with group_by='mserp_etgproductlevel03name' → category breakdown\n"
-        "4. Combine and cross-reference all results to produce actionable insights.\n"
-        "5. If deeper drill-down is needed, use filter_query to fix one dimension, then group_by another.\n"
+        "1. Call `get_latest_report_date` to find the most recent data snapshot date.\n"
+        "2. Call `calculate_inventory_totals` with filter_query='mserp_headerreportdate eq <date>' + group_by='mserp_companyname'\n"
+        "3. Call `calculate_inventory_totals` with same date filter + group_by='mserp_inventsitename'\n"
+        "4. Call `calculate_inventory_totals` with same date filter + group_by='mserp_etgproductlevel03name'\n"
+        "5. Combine and cross-reference all results to produce actionable insights.\n"
+        "6. If deeper drill-down is needed, use filter_query to fix one dimension, then group_by another.\n"
     ),
 )
 
@@ -145,6 +157,25 @@ async def get_inventory_aging_count() -> str:
     try:
         count = await client.get_record_count(ENTITY_SET)
         return f"Total records in Inventory Aging Report: **{count:,}**"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
+async def get_latest_report_date() -> str:
+    """Returns the most recent report date (mserp_headerreportdate) available in the dataset.
+    ALWAYS call this FIRST when the user does not specify a date.
+    Use the returned date in filter_query like: mserp_headerreportdate eq <date>
+    """
+    try:
+        result = await client.aggregate_table(
+            ENTITY_SET, numeric_field="mserp_headerreportdate", agg_type="max"
+        )
+        max_date = result.get("mserp_headerreportdate_max", "Unknown")
+        # Extract just the date portion (remove time)
+        if isinstance(max_date, str) and "T" in max_date:
+            max_date = max_date.split("T")[0]
+        return f"Latest report date: **{max_date}**\nUse this in your filters: `mserp_headerreportdate eq {max_date}`"
     except Exception as e:
         return f"Error: {e}"
 
