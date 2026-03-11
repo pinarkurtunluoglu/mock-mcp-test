@@ -7,6 +7,20 @@ from __future__ import annotations
 
 import re
 
+# ── Allowed Columns ───────────────────────────────────────
+# ONLY these columns from the Field Catalog are allowed.
+ALLOWED_COLUMNS: set[str] = {
+    "mserp_itemname",
+    "mserp_itemid",
+    "mserp_etgproductlevel03name",
+    "mserp_qty",
+    "mserp_purchfifo",
+    "mserp_headerreportdate",
+    "mserp_inventsitename",
+    "mserp_inventlocationname",
+    "mserp_companyname",
+}
+
 # ── Alias Map ─────────────────────────────────────────────
 # Maps commonly hallucinated/shortened names → correct Dataverse column names.
 COLUMN_ALIASES: dict[str, str] = {
@@ -34,46 +48,52 @@ COLUMN_ALIASES: dict[str, str] = {
     "mserp_productcategory": "mserp_etgproductlevel03name",
     "mserp_etgproductlevel03": "mserp_etgproductlevel03name",
     "mserp_productlevel": "mserp_etgproductlevel03name",
-    # Country of Origin
-    "mserp_countryoforigin": "mserp_inventcolorid",
-    "mserp_countryoforiginname": "mserp_inventcolorid",
-    "mserp_origin": "mserp_inventcolorid",
-    "mserp_country": "mserp_inventcolorid",
     # Date
     "mserp_reportdate": "mserp_headerreportdate",
     "mserp_date": "mserp_headerreportdate",
 }
 
 
-def fix_column(name: str) -> str:
-    """Fixes a single column name if it's a known alias."""
-    return COLUMN_ALIASES.get(name.strip().lower(), name.strip())
+def fix_column(name: str) -> str | None:
+    """Fixes a single column name if it's a known alias. Returns None if not in whitelist."""
+    name = name.strip().lower()
+    fixed = COLUMN_ALIASES.get(name, name)
+    return fixed if fixed in ALLOWED_COLUMNS else None
 
 
 def fix_select(select: str) -> str:
-    """Fixes all column names in a $select string (comma-separated)."""
+    """Fixes all column names in a $select string. Discards non-whitelisted columns."""
     if not select:
         return select
-    columns = [fix_column(c) for c in select.split(",")]
-    return ",".join(columns)
+    fixed_cols = []
+    for c in select.split(","):
+        fixed = fix_column(c)
+        if fixed:
+            fixed_cols.append(fixed)
+    return ",".join(fixed_cols)
 
 
 def fix_filter(filter_query: str) -> str:
-    """Fixes column names inside an OData $filter expression."""
+    """Fixes column names inside an OData $filter expression. Discards alias if target not in whitelist."""
     if not filter_query:
         return filter_query
     
     result = filter_query
     for wrong, correct in COLUMN_ALIASES.items():
-        # Replace whole-word matches only (case-insensitive)
-        pattern = re.compile(re.escape(wrong), re.IGNORECASE)
-        result = pattern.sub(correct, result)
+        if correct in ALLOWED_COLUMNS:
+            # Replace whole-word matches only (case-insensitive)
+            pattern = re.compile(re.escape(wrong), re.IGNORECASE)
+            result = pattern.sub(correct, result)
     return result
 
 
 def fix_group_by(group_by: str) -> str:
-    """Fixes column names in a group_by parameter."""
+    """Fixes column names in a group_by parameter. Discards non-whitelisted columns."""
     if not group_by:
         return group_by
-    columns = [fix_column(c) for c in group_by.split(",")]
-    return ",".join(columns)
+    fixed_cols = []
+    for c in group_by.split(","):
+        fixed = fix_column(c)
+        if fixed:
+            fixed_cols.append(fixed)
+    return ",".join(fixed_cols)
