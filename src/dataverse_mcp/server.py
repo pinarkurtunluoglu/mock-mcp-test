@@ -524,7 +524,7 @@ async def calculate_weighted_average(
     Args:
         value_field: The column to average (default: 'mserp_purchfifo' - inventory age).
         weight_field: The column to use as weight (default: 'mserp_qty' - quantity).
-        group_by: Optional column to group results by (e.g. 'mserp_companyname').
+        group_by: Optional column to group results by (e.g. 'mserp_companyname', 'mserp_inventsitename').
         filter_query: OData $filter to narrow scope.
     """
     try:
