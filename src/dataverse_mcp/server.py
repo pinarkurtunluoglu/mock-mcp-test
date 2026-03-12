@@ -131,12 +131,20 @@ mcp = FastMCP(
         "- 'yaş' / 'bekleme süresi' / 'stok yaşı' → use `mserp_purchfifo`\n"
         "- 'miktar' / 'adet' / 'ton' → use `mserp_qty`\n\n"
 
+        # ── UNIVERSAL DATA AWARENESS ──────────────────────────
+        "## Universal Data Awareness — How you 'see' everything\n"
+        "You have access to the ENTIRE latest report (~500k rows) through three lenses:\n"
+        "1. **Eagle Eye (Aggregation)**: Use `calculate_inventory_totals` to see the WHOLE report's sums/averages instantly. You are OMNISCIENT here.\n"
+        "2. **Searchlight (Filtering)**: Use `search_inventory_aging` to find ANY specific needle in the 500k haystack.\n"
+        "3. **Paging (Scrolling)**: Use `query_inventory_aging` with `skip` to scroll through the report page-by-page. "
+        "Each page shows 50-500 rows. To see more, increment `skip` (e.g., skip=100, skip=200).\n\n"
+
         # ── MULTI-STEP ANALYSIS WORKFLOW ──────────────────────
         "## Multi-Step Analysis Workflow\n"
         "For comprehensive insights on the LATEST data, follow this pattern:\n"
-        "1. Call `calculate_inventory_totals` with group_by='mserp_companyname'\n"
-        "2. Call `calculate_inventory_totals` with group_by='mserp_inventsitename'\n"
-        "3. Call `calculate_inventory_totals` with group_by='mserp_etgproductlevel03name'\n"
+        "1. Start with `calculate_inventory_totals` (Eagle Eye) to see the big picture (totals by company/site).\n"
+        "2. Identify anomalies or interests, then `query_inventory_aging` (Paging) to see specific examples.\n"
+        "3. If a specific entity is mentioned, use `search_inventory_aging` (Searchlight).\n"
         "4. Combine and cross-reference all results to produce actionable insights.\n"
         "5. If deeper drill-down is needed, use filter_query to fix one dimension, then group_by another.\n"
     ),
@@ -211,15 +219,17 @@ async def query_inventory_aging(
     filter_query: str = "",
     orderby: str = "",
     top: int = 50,
+    skip: int = 0,
 ) -> str:
-    """Returns raw records from the Inventory Aging Report (max 500 rows).
-    Use ONLY for viewing specific records or examples — NEVER for calculating totals.
+    """Returns raw records from the Inventory Aging Report (max 500 rows at a time).
+    Use for viewing specific records or Examples. Use `skip` for pagination.
 
     Args:
         select: Comma-separated columns to return (e.g. 'mserp_itemname,mserp_qty'). Leave empty for all.
         filter_query: OData $filter (e.g. "contains(mserp_itemname, 'BUĞDAY')").
         orderby: OData $orderby (e.g. "mserp_qty desc").
-        top: Max records to return (default: 50, max: 500).
+        top: Max records to return per page (default: 50, max: 500).
+        skip: Number of records to skip (for pagination). Use to see next pages.
     """
     try:
         if top > 500:
@@ -242,17 +252,24 @@ async def query_inventory_aging(
             filter_query=filter_query or None,
             orderby=orderby or None,
             top=top,
+            skip=skip or None,
         )
         columns = [c.strip() for c in select.split(",")] if select else None
         result = formatter.format_records_table(records, columns=columns)
         
-        # Build response with completeness warning
-        header = f"**Inventory Aging Report** — Showing {len(records)} records"
-        if total_count and total_count > len(records):
-            header += f" out of {total_count:,} total"
-            header += f"\n\n> **Bu tabloda {total_count:,} kayıt var. Tamamını gösteremiyorum.** "
-            header += "Toplam, ortalama gibi hesaplamalar için `calculate_inventory_totals` tool'unu kullanın."
+        # Build response with completeness & pagination info
+        current_range = f"{skip + 1} ile {skip + len(records)}" if records else "0"
+        total_msg = f"{total_count:,}" if total_count else "???"
         
+        header = f"**Inventory Aging Report** (Sayfa: {current_range} / Toplam: {total_msg} kayıt)"
+        
+        if total_count and total_count > (skip + len(records)):
+            next_skip = skip + len(records)
+            header += f"\n\n> **Daha fazla kayıt var.** Bir sonraki sayfayı görmek için `skip={next_skip}` parametresini kullanın."
+        
+        if total_count and total_count > len(records) and skip == 0:
+             header += "\n> Toplam/ortalama hesaplamaları için `calculate_inventory_totals` kullanmanızı öneririm."
+
         return guard(f"{header}\n\n{result}")
     except Exception as e:
         return f"Error: {e}"

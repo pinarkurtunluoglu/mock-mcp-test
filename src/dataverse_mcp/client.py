@@ -105,6 +105,8 @@ class DataverseClient:
         
         if top and not fetch_all:
             params.append(f"$top={top}")
+        if skip := kwargs.get("skip"):
+            params.append(f"$skip={skip}")
             
         query_string = "&".join(params)
         path = f"{entity_set}?{query_string}" if query_string else entity_set
