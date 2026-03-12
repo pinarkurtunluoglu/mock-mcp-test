@@ -112,6 +112,11 @@ mcp = FastMCP(
         "1. You do NOT need to call `get_latest_report_date` anymore.\n"
         "2. You do NOT need to add `mserp_headerreportdate` to your filters unless the user asks for a specific date.\n"
         "3. Focus ONLY on filtering by company, site, category, or product.\n\n"
+        
+        "## Filtering Rules — CRITICAL\n"
+        "1. **NEVER use fields ending in 'id' for filtering by name/text** (e.g., NEVER use `mserp_siteid` or `mserp_inventsiteid`).\n"
+        "2. **ALWAYS use mserp_inventsitename** when filtering by site/facility name (e.g., Gaziantep, Muş).\n"
+        "3. **ALWAYS use contains(column, 'value')** for text fields to ensure robustness.\n\n"
 
         # ── FORBIDDEN PATTERNS ────────────────────────────────
         "## Forbidden Patterns — NEVER do these\n"

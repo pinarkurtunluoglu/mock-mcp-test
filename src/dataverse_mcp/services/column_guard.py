@@ -28,6 +28,7 @@ COLUMN_ALIASES: dict[str, str] = {
     "mserp_site": "mserp_inventsitename",
     "mserp_sitename": "mserp_inventsitename",
     "mserp_siteid": "mserp_inventsitename",
+    "mserp_site_id": "mserp_inventsitename",
     "mserp_inventsiteid": "mserp_inventsitename",
     "mserp_facility": "mserp_inventsitename",
     # Company
