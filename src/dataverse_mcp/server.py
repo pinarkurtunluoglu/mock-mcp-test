@@ -66,77 +66,34 @@ mcp = FastMCP(
         f"(entity: '{ENTITY_SET}', ~500 000 records). "
         "Always respond in the same language as the user's message (usually Turkish).\n\n"
 
-        # ── FIELD CATALOG ─────────────────────────────────────
-        "## Field Catalog (ALWAYS use these exact column names)\n"
+        # ── FIELD CATALOG (THE ONLY TRUTH) ────────────────────
+        "## Field Catalog — THE ONLY COLUMNS THAT EXIST\n"
         "| Concept | Column Name | Notes |\n"
         "|---|---|---|\n"
         "| Product Name | mserp_itemname | Full product name (Turkish text) |\n"
         "| Product Code | mserp_itemid | Short code like 10IQ4112 |\n"
-        "| Product Category | mserp_etgproductlevel03name | e.g. Wheat, Corn (mixed-case English) |\n"
+        "| Product Category | mserp_etgproductlevel03name | e.g. Wheat, Corn |\n"
         "| Quantity | mserp_qty | Inventory quantity (numeric) |\n"
         "| FIFO Age (days) | mserp_purchfifo | Days since purchase (FIFO) |\n"
         "| Report Date | mserp_headerreportdate | Use for ALL date filtering |\n"
-        "| Site / Facility | mserp_inventsitename | e.g. Gaziantep Tesisi, Vessel |\n"
+        "| Site / Facility | mserp_inventsitename | e.g. Gaziantep Tesisi, Muş |\n"
         "| Warehouse | mserp_inventlocationname | Sub-location within a site |\n"
-        "| Company | mserp_companyname | e.g. MESOPOTAMIA FZE IRAQ BRANCH |\n"
+        "| Company | mserp_companyname | e.g. MESOPOTAMIA FZE |\n\n"
 
-        # ── TOOL SELECTION (Decision Matrix) ──────────────────
-        "## Tool Selection — ALWAYS pick the right tool\n"
-        "**CRITICAL RULE: When the user asks for 'toplam', 'ortalama', 'minimum', 'maximum', 'kaç kayıt', "
-        "'kaç gün', 'kaç ton' → you MUST use `calculate_inventory_totals` or `calculate_multi_metrics`. "
-        "NEVER use `summarize_inventory_aging` or `query_inventory_aging` for any calculation.**\n\n"
-        "| User Intent | Correct Tool | Why |\n"
-        "|---|---|---|\n"
-        "| **Ağırlıklı Ortalama Stok Yaşı (GERÇEK YAŞ)** | calculate_weighted_average | **BU ARACI KULLANIN.** Stok miktarına göre ağırlıklı 'gerçek' yaşı hesaplar. |\n"
-        "| Totals, sums, averages, counts, insights, trends | calculate_inventory_totals | Server-side aggregation on FULL dataset |\n"
-        "| Multiple metrics at once (sum+avg+min+max+count) | calculate_multi_metrics | FASTEST - runs all 5 in PARALLEL, one call |\n"
-        "| Compare groups (company vs company, site vs site) | calculate_inventory_totals (multiple calls) | Use different group_by per call |\n"
-        "| Cross-dimensional (e.g. category breakdown within one company) | calculate_inventory_totals with filter_query + group_by | filter fixes one dimension, group_by splits the other |\n"
-        "| View specific raw records, examples, samples | query_inventory_aging | Returns max 500 rows |\n"
-        "| Find a record by name/keyword | search_inventory_aging | Case-insensitive contains search |\n"
-        "| Understand table structure | get_inventory_aging_schema | Returns columns and types |\n"
-        "| Get total record count | get_inventory_aging_count | Single number for latest date |\n\n"
-
-        # ── ODATA QUERY RULES ─────────────────────────────────
-        "## OData Query Rules\n"
-        "1. **Text search**: ALWAYS use `contains(column, 'value')`. NEVER use `eq` for text/name columns.\n"
-        "2. **Case sensitivity**: `contains()` is case-insensitive, so 'wheat', 'WHEAT', 'Wheat' all work.\n"
-        "3. **group_by limit**: Only ONE column per call. For multi-dimension analysis, make multiple calls.\n"
-        "4. **Numeric filters**: Use standard OData operators: `mserp_purchfifo gt 100`, `mserp_qty lt 500`.\n"
-        "5. **Date filters**: `mserp_headerreportdate ge 2024-01-01`.\n"
-        "6. **Datetime groupby**: NEVER use group_by on `mserp_headerreportdate` — Dataverse rejects groupby on datetime fields.\n\n"
-
-        # ── DATE AWARENESS ────────────────────────────────────
-        "## Date Awareness — AUTOMATIC\n"
-        "The server AUTOMATICALLY filters all queries to the LATEST report date.\n"
-        "1. You do NOT need to call `get_latest_report_date` anymore.\n"
-        "2. You do NOT need to add `mserp_headerreportdate` to your filters unless the user asks for a specific date.\n"
-        "3. Focus ONLY on filtering by company, site, category, or product.\n\n"
-        
-        "## Filtering Rules — CRITICAL\n"
-        "1. **NEVER use fields ending in 'id' for filtering by name/text** (e.g., NEVER use `mserp_siteid` or `mserp_inventsiteid`).\n"
-        "2. **ALWAYS use mserp_inventsitename** when filtering by site/facility name (e.g., Gaziantep, Muş).\n"
-        "3. **ALWAYS use contains(column, 'value')** for text fields to ensure robustness.\n\n"
-
-        # ── FORBIDDEN PATTERNS ────────────────────────────────
-        "## Forbidden Patterns — NEVER do these\n"
-        "- NEVER use any column name NOT listed in the Field Catalog above.\n"
-        "- NEVER invent or shorten column names. Use ONLY exact names from the catalog.\n"
-        "- NEVER use `tolower()` or `toupper()` in OData — Virtual Entities reject these.\n"
-        "- NEVER use group_by on `mserp_headerreportdate` — Dataverse rejects groupby on datetime fields.\n"
-        "- NEVER calculate totals from `query_inventory_aging` or `summarize_inventory_aging` results.\n"
-        "- NEVER pass multiple columns to group_by.\n\n"
-
-        # ── TURKISH LANGUAGE MAPPING ──────────────────────────
+        # ── TURKISH → COLUMN MAPPING ──────────────────────────
         "## Turkish → Column Mapping\n"
         "When the user says:\n"
-        "- 'ürün adı' / 'ürün ismi' / 'malzeme' → search in `mserp_itemname`\n"
-        "- 'kategori' / 'ürün grubu' / 'ürün kategorisi' → search in `mserp_etgproductlevel03name`\n"
-        "- 'tesis' / 'depo' / 'site' → search in `mserp_inventsitename`\n"
-        "- 'şirket' / 'firma' → search in `mserp_companyname`\n"
-        "- 'yaş' / 'bekleme süresi' / 'stok yaşı' → use `mserp_purchfifo`\n"
-        "**CRITICAL RULE: When user asks for 'ortalama yaş' (average age) → ALWAYS use `calculate_weighted_average`. NEVER use standard average from other tools for age.**\n"
-        "- 'miktar' / 'adet' / 'ton' → use `mserp_qty`\n\n"
+        "- 'ürün' / 'malzeme' / 'isim' → use `mserp_itemname`\n"
+        "- 'kategori' / 'grup' → use `mserp_etgproductlevel03name`\n"
+        "- 'tesis' / 'depo' / 'site' → use `mserp_inventsitename`\n"
+        "- 'şirket' / 'firma' → use `mserp_companyname`\n"
+        "- **'ortalama yaş' (average age)** → ALWAYS use `calculate_weighted_average` with `mserp_purchfifo` weighted by `mserp_qty`.\n\n"
+
+        # ── FILTERING RULES — NO EXCEPTIONS ──────────────────
+        "## Filtering Rules — NO EXCEPTIONS\n"
+        "1. **SEARCH BY NAME**: ALWAYS use `contains(column, 'value')` for text fields (`mserp_itemname`, `mserp_inventsitename`, etc.).\n"
+        "2. **NO TECHNICAL IDs**: NEVER use fields ending in 'id' (e.g., `mserp_siteid`) for filtering by text. They do not exist for you.\n"
+        "3. **DATE AUTOMATION**: The server automatically filters to the LATEST date. Do NOT add `mserp_headerreportdate` to filters unless a specific past date is requested.\n\n"
 
         # ── UNIVERSAL DATA AWARENESS ──────────────────────────
         "## Universal Data Awareness — How you 'see' everything\n"
