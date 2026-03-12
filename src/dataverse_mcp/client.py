@@ -199,6 +199,80 @@ class DataverseClient:
             
         return value_list[0]
 
+    async def calculate_weighted_average(
+        self,
+        entity_set: str,
+        value_field: str,
+        weight_field: str,
+        filter_query: str = "",
+        group_by: str = ""
+    ) -> float | list[dict[str, Any]]:
+        """Calculates weighted average server-side by grouping and summing.
+        
+        Args:
+            entity_set: The table to query.
+            value_field: The field to average (e.g., age).
+            weight_field: The field to use as weight (e.g., quantity).
+            filter_query: Optional filter.
+            group_by: Optional grouping (e.g., site). If provided, returns a list of results per group.
+        """
+        # Always group by value_field to get counts/sums for each unique value
+        # If the user also wants to group by something else (e.g., site), we include it
+        inner_groups = [value_field]
+        if group_by:
+            inner_groups.append(group_by)
+        
+        inner_group_str = ",".join(inner_groups)
+        
+        # 1. Get sum of weights grouped by value (and optional extra group)
+        results = await self.aggregate_table(
+            entity_set,
+            numeric_field=weight_field,
+            agg_type="sum",
+            group_by=inner_group_str,
+            filter_query=filter_query
+        )
+        
+        if not isinstance(results, list):
+            results = [results]
+
+        weight_sum_alias = f"{weight_field}_sum"
+
+        if group_by:
+            # Handle grouped results (e.g., weighted average per site)
+            grouped_data = {}
+            for row in results:
+                g_val = row.get(group_by)
+                if g_val not in grouped_data:
+                    grouped_data[g_val] = {"weighted_sum": 0, "total_weight": 0}
+                
+                val = row.get(value_field, 0)
+                weight = row.get(weight_sum_alias, 0)
+                
+                grouped_data[g_val]["weighted_sum"] += (val * weight)
+                grouped_data[g_val]["total_weight"] += weight
+            
+            final_results = []
+            for g_val, data in grouped_data.items():
+                avg = data["weighted_sum"] / data["total_weight"] if data["total_weight"] > 0 else 0
+                final_results.append({
+                    group_by: g_val,
+                    f"{value_field}_weighted_avg": avg,
+                    "total_weight": data["total_weight"]
+                })
+            return final_results
+        else:
+            # Handle single result
+            total_weighted_sum = 0
+            total_weight = 0
+            for row in results:
+                val = row.get(value_field, 0)
+                weight = row.get(weight_sum_alias, 0)
+                total_weighted_sum += (val * weight)
+                total_weight += weight
+            
+            return total_weighted_sum / total_weight if total_weight > 0 else 0.0
+
     async def get_record(self, entity_set: str, record_id: str, **kwargs) -> dict[str, Any]:
         """Retrieves a single record by its ID."""
         params = []

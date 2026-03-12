@@ -87,6 +87,7 @@ mcp = FastMCP(
         "NEVER use `summarize_inventory_aging` or `query_inventory_aging` for any calculation.**\n\n"
         "| User Intent | Correct Tool | Why |\n"
         "|---|---|---|\n"
+        "| **Ağırlıklı Ortalama Stok Yaşı (GERÇEK YAŞ)** | calculate_weighted_average | **BU ARACI KULLANIN.** Stok miktarına göre ağırlıklı 'gerçek' yaşı hesaplar. |\n"
         "| Totals, sums, averages, counts, insights, trends | calculate_inventory_totals | Server-side aggregation on FULL dataset |\n"
         "| Multiple metrics at once (sum+avg+min+max+count) | calculate_multi_metrics | FASTEST - runs all 5 in PARALLEL, one call |\n"
         "| Compare groups (company vs company, site vs site) | calculate_inventory_totals (multiple calls) | Use different group_by per call |\n"
@@ -129,6 +130,7 @@ mcp = FastMCP(
         "- 'tesis' / 'depo' / 'site' → search in `mserp_inventsitename`\n"
         "- 'şirket' / 'firma' → search in `mserp_companyname`\n"
         "- 'yaş' / 'bekleme süresi' / 'stok yaşı' → use `mserp_purchfifo`\n"
+        "**CRITICAL RULE: When user asks for 'ortalama yaş' (average age) → ALWAYS use `calculate_weighted_average`. NEVER use standard average from other tools for age.**\n"
         "- 'miktar' / 'adet' / 'ton' → use `mserp_qty`\n\n"
 
         # ── UNIVERSAL DATA AWARENESS ──────────────────────────
@@ -502,6 +504,60 @@ async def calculate_multi_metrics(
         return "\n".join(lines)
     except Exception as e:
         return f"Error: Multi-metric calculation failed. {e}"
+
+
+@mcp.tool()
+async def calculate_weighted_average(
+    value_field: str = "mserp_purchfifo",
+    weight_field: str = "mserp_qty",
+    group_by: str = "",
+    filter_query: str = "",
+) -> str:
+    """Calculates WEIGHTED AVERAGE (e.g., true inventory age) across the ENTIRE dataset.
+    This is much more accurate than arithmetic average for inventory age.
+    
+    Args:
+        value_field: The column to average (default: 'mserp_purchfifo' - inventory age).
+        weight_field: The column to use as weight (default: 'mserp_qty' - quantity).
+        group_by: Optional column to group results by (e.g. 'mserp_companyname').
+        filter_query: OData $filter to narrow scope.
+    """
+    try:
+        value_field = fix_column(value_field)
+        weight_field = fix_column(weight_field)
+        group_by = fix_group_by(group_by)
+        filter_query = fix_filter(filter_query)
+        filter_query = await _ensure_latest_date_filter(filter_query)
+        
+        result = await client.calculate_weighted_average(
+            ENTITY_SET,
+            value_field=value_field,
+            weight_field=weight_field,
+            filter_query=filter_query,
+            group_by=group_by
+        )
+        
+        header = f"### Weighted Average Analysis"
+        sub_header = f"- **Target Field:** `{value_field}`\n- **Weight Field:** `{weight_field}`"
+        
+        if group_by and isinstance(result, list):
+            # Sort by weighted average descending
+            result.sort(key=lambda r: r.get(f"{value_field}_weighted_avg", 0), reverse=True)
+            
+            lines = [header, sub_header, f"\n| {group_by} | Weighted Average | Total Weight |", "|---|---|---|"]
+            for row in result:
+                g_val = row.get(group_by, "N/A")
+                avg = row.get(f"{value_field}_weighted_avg", 0)
+                weight = row.get("total_weight", 0)
+                lines.append(f"| {g_val} | **{avg:.2f}** | {weight:,.2f} |")
+            return "\n".join(lines)
+        else:
+            # Single value
+            avg_val = result if isinstance(result, (int, float)) else 0
+            return f"{header}\n{sub_header}\n\n**Calculated Weighted Average: {avg_val:.2f}**"
+
+    except Exception as e:
+        return f"Error calculating weighted average: {e}"
 
 
 # ═══════════════════════════════════════════════════════════
