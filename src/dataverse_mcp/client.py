@@ -175,7 +175,8 @@ class DataverseClient:
             aggregate_expr = f"aggregate({numeric_field} with {odata_agg} as {alias})"
         
         if filter_query:
-            safe_chars = "() eqgtnl'"
+            # Add comma to safe chars so contains(a, b) isn't mangled into contains(a%2C b)
+            safe_chars = "() eqgtnl',"
             encoded_filter = urllib.parse.quote(filter_query, safe=safe_chars)
             filter_prefix = f"filter({encoded_filter})/"
         else:

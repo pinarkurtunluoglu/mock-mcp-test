@@ -93,7 +93,8 @@ mcp = FastMCP(
         "## Filtering Rules — NO EXCEPTIONS\n"
         "1. **SEARCH BY NAME**: ALWAYS use `contains(column, 'value')` for text fields (`mserp_itemname`, `mserp_inventsitename`, etc.).\n"
         "2. **NO TECHNICAL IDs**: NEVER use fields ending in 'id' (e.g., `mserp_siteid`) for filtering by text. They do not exist for you.\n"
-        "3. **DATE AUTOMATION**: The server automatically filters to the LATEST date. Do NOT add `mserp_headerreportdate` to filters unless a specific past date is requested.\n\n"
+        "3. **DATE AUTOMATION**: The server automatically filters to the LATEST date. Do NOT add `mserp_headerreportdate` to filters unless a specific past date is requested.\n"
+        "4. **TURKISH CHARS**: Dataverse search is SENSITIVE to Turkish characters. If searching for Muş, use exact 'Muş' or 'MUŞ' in `contains()`. NEVER swap 'Ş' for 'S'.\n\n"
 
         # ── UNIVERSAL DATA AWARENESS ──────────────────────────
         "## Universal Data Awareness — How you 'see' everything\n"
