@@ -15,12 +15,11 @@ class DataFormatter:
         lines.append("| Field | Value |")
         lines.append("| --- | --- |")
 
-        # Sort fields, keeping metadata at the bottom
-        meta_fields = ["id", "createdon", "modifiedon", "versionnumber"]
-        keys = sorted(record.keys(), key=lambda k: (k in meta_fields, k))
+        # ONLY show columns that are in the global ALLOWED_COLUMNS whitelist
+        from dataverse_mcp.services.column_guard import ALLOWED_COLUMNS
+        keys = [k for k in sorted(record.keys()) if k in ALLOWED_COLUMNS]
 
         for key in keys:
-            if key.startswith("@"): continue  # Skip OData metadata
             value = self._format_value(record[key])
             lines.append(f"| **{key}** | {value} |")
 
@@ -40,10 +39,11 @@ class DataFormatter:
             return "No records found."
 
         if not columns:
-            # Use keys from the first record, skipping metadata
-            meta_fields = ["id", "createdon", "modifiedon", "versionnumber", "ownerid"]
-            columns = [k for k in records[0].keys() if k not in meta_fields and not k.startswith("@")]
-            columns = columns[:8]  # Limit width for context efficiency
+            # Strictly use ALLOWED_COLUMNS from the guard
+            from dataverse_mcp.services.column_guard import ALLOWED_COLUMNS
+            columns = [k for k in records[0].keys() if k in ALLOWED_COLUMNS]
+            # Maintain a consistent order if possible
+            columns = sorted(columns)
 
         # Cap the number of rows
         total = len(records)
@@ -95,13 +95,11 @@ class DataFormatter:
         display = schema.get("DisplayName", {}).get("UserLocalizedLabel", {}).get("Label", logical)
         attrs = schema.get("Attributes", [])
 
-        if key_only:
-            key_attrs = [a for a in attrs if a.get("LogicalName") in self.KEY_COLUMNS]
-            other_count = len(attrs) - len(key_attrs)
-            title_note = f" (showing {len(key_attrs)} key columns, {other_count} others hidden)"
-        else:
-            key_attrs = attrs
-            title_note = ""
+        # ALWAYS filter by ALLOWED_COLUMNS for the AI
+        from dataverse_mcp.services.column_guard import ALLOWED_COLUMNS
+        key_attrs = [a for a in attrs if a.get("LogicalName") in ALLOWED_COLUMNS]
+        other_count = len(attrs) - len(key_attrs)
+        title_note = f" (showing {len(key_attrs)} key columns, {other_count} others hidden)"
 
         lines = [
             f"### Table Schema: `{logical}`{title_note}\n",

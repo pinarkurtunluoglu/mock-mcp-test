@@ -180,12 +180,6 @@ async def get_inventory_aging_schema() -> str:
     Only essential business columns are returned to ensure focus."""
     try:
         schema = await client.get_table_schema(ENTITY_LOGICAL)
-        # Filter attributes to only show what the AI is allowed to use
-        if "Attributes" in schema:
-            schema["Attributes"] = [
-                a for a in schema["Attributes"] 
-                if a.get("LogicalName") in ALLOWED_COLUMNS
-            ]
         return guard(formatter.format_schema(schema))
     except Exception as e:
         return f"Error: {e}"

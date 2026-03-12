@@ -27,10 +27,11 @@ class DataSummarizer:
         parts.append(f"- **Total Records Analyzed:** {len(records):,}")
         
         # Identify numeric vs categorical fields if key_fields not provided
+        from dataverse_mcp.services.column_guard import ALLOWED_COLUMNS
         if not key_fields and records:
-            # Auto-detect some interesting fields (numeric or short strings)
-            key_fields = [k for k, v in records[0].items() 
-                         if not k.startswith("@") and isinstance(v, (int, float, str))][:10]
+            # ONLY use allowed columns from the guard
+            key_fields = [k for k in records[0].keys() 
+                         if k in ALLOWED_COLUMNS]
 
         # Field statistics and distributions
         if key_fields:
