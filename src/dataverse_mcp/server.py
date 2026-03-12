@@ -136,8 +136,9 @@ mcp = FastMCP(
         "You have access to the ENTIRE latest report (~500k rows) through three lenses:\n"
         "1. **Eagle Eye (Aggregation)**: Use `calculate_inventory_totals` to see the WHOLE report's sums/averages instantly. You are OMNISCIENT here.\n"
         "2. **Searchlight (Filtering)**: Use `search_inventory_aging` to find ANY specific needle in the 500k haystack.\n"
-        "3. **Paging (Scrolling)**: Use `query_inventory_aging` with `skip` to scroll through the report page-by-page. "
-        "Each page shows 50-500 rows. To see more, increment `skip` (e.g., skip=100, skip=200).\n\n"
+        "3. **Paging (Scrolling)**: Use `query_inventory_aging` with `next_token` to scroll through the report page-by-page. "
+        "F&O Virtual Entities do not support `skip`. They ONLY support `next_token`. To see the next page, "
+        "pass the token returned in the previous response's footer.\n\n"
 
         # ── MULTI-STEP ANALYSIS WORKFLOW ──────────────────────
         "## Multi-Step Analysis Workflow\n"
@@ -219,58 +220,53 @@ async def query_inventory_aging(
     filter_query: str = "",
     orderby: str = "",
     top: int = 50,
-    skip: int = 0,
+    next_token: str = "",
 ) -> str:
-    """Returns raw records from the Inventory Aging Report (max 500 rows at a time).
-    Use for viewing specific records or Examples. Use `skip` for pagination.
+    """Returns raw records from the Inventory Aging Report. Use `next_token` for "scrolling".
+    F&O Virtual Entities do NOT support `skip`. They only support `next_token` (skiptoken).
 
     Args:
-        select: Comma-separated columns to return (e.g. 'mserp_itemname,mserp_qty'). Leave empty for all.
+        select: Comma-separated columns (e.g. 'mserp_itemname,mserp_qty').
         filter_query: OData $filter (e.g. "contains(mserp_itemname, 'BUĞDAY')").
         orderby: OData $orderby (e.g. "mserp_qty desc").
-        top: Max records to return per page (default: 50, max: 500).
-        skip: Number of records to skip (for pagination). Use to see next pages.
+        top: Max records per page (default: 50, max: 500).
+        next_token: The pagination token from the previous response to see the next page.
     """
     try:
         if top > 500:
             top = 500
-        
-        # Get total count to inform AI about data completeness
-        try:
-            total_count = await client.get_record_count(ENTITY_SET)
-        except Exception:
-            total_count = None
         
         # Auto-correct hallucinated column names
         select = fix_select(select)
         filter_query = fix_filter(filter_query)
         filter_query = await _ensure_latest_date_filter(filter_query)
         
-        records = await client.query_table(
+        # Call client with skiptoken support
+        result_dict = await client.query_table(
             ENTITY_SET,
             select=select or None,
             filter_query=filter_query or None,
             orderby=orderby or None,
             top=top,
-            skip=skip or None,
+            next_link=next_token or None,
         )
+        
+        records = result_dict.get("value", [])
+        next_link = result_dict.get("@odata.nextLink")
+        
         columns = [c.strip() for c in select.split(",")] if select else None
-        result = formatter.format_records_table(records, columns=columns)
+        result_table = formatter.format_records_table(records, columns=columns)
         
         # Build response with completeness & pagination info
-        current_range = f"{skip + 1} ile {skip + len(records)}" if records else "0"
-        total_msg = f"{total_count:,}" if total_count else "???"
+        header = f"**Inventory Aging Report** — Showing {len(records)} records."
         
-        header = f"**Inventory Aging Report** (Sayfa: {current_range} / Toplam: {total_msg} kayıt)"
+        if next_link:
+            header += f"\n\n> **Daha fazla kayıt var.** Bir sonraki sayfayı görmek için `next_token` parametresine şu değeri yapıştırın:\n> `{next_link}`"
         
-        if total_count and total_count > (skip + len(records)):
-            next_skip = skip + len(records)
-            header += f"\n\n> **Daha fazla kayıt var.** Bir sonraki sayfayı görmek için `skip={next_skip}` parametresini kullanın."
-        
-        if total_count and total_count > len(records) and skip == 0:
+        if not next_token:
              header += "\n> Toplam/ortalama hesaplamaları için `calculate_inventory_totals` kullanmanızı öneririm."
 
-        return guard(f"{header}\n\n{result}")
+        return guard(f"{header}\n\n{result_table}")
     except Exception as e:
         return f"Error: {e}"
 
@@ -281,15 +277,17 @@ async def search_inventory_aging(
     search_term: str,
     select: str = "",
     top: int = 20,
+    next_token: str = "",
 ) -> str:
-    """Searches for records where a field contains the given term (case-insensitive).
+    """Searches for records using a keyword. Use `next_token` for more results.
     Always use Name columns (e.g. mserp_companyname, NOT mserp_companyid).
 
     Args:
         search_field: Column to search in (e.g. 'mserp_itemname', 'mserp_companyname').
         search_term: Value to search for (case-insensitive).
-        select: Comma-separated columns to return. Leave empty for all.
-        top: Max results (default: 20).
+        select: Comma-separated columns to return.
+        top: Max results per page (default: 20).
+        next_token: Pagination token for the next page of results.
     """
     try:
         # Auto-correct and enforce date
@@ -297,12 +295,21 @@ async def search_inventory_aging(
         select = fix_select(select)
         filter_query = await _ensure_latest_date_filter("")
         
-        records = await client.search_records(
+        result_dict = await client.search_records(
             ENTITY_SET, search_field=search_field, search_term=search_term,
-            select=select or None, top=top, filter_query=filter_query
+            select=select or None, top=top, filter_query=filter_query,
+            next_link=next_token or None
         )
-        result = formatter.format_records_table(records)
-        return guard(f"**Search Results** — Found {len(records)} records where '{search_field}' contains '{search_term}'\n\n{result}")
+        records = result_dict.get("value", [])
+        next_link = result_dict.get("@odata.nextLink")
+        
+        result_table = formatter.format_records_table(records)
+        
+        header = f"**Search Results** — Found {len(records)} records where '{search_field}' contains '{search_term}'"
+        if next_link:
+            header += f"\n\n> **Daha fazla sonuç var.** Devamı için `next_token` parametresini kullanın:\n> `{next_link}`"
+            
+        return guard(f"{header}\n\n{result_table}")
     except Exception as e:
         return f"Error: {e}"
 
@@ -350,13 +357,14 @@ async def summarize_inventory_aging(
         filter_query = fix_filter(filter_query)
         filter_query = await _ensure_latest_date_filter(filter_query)
         
-        records = await client.query_table(
+        result_dict = await client.query_table(
             ENTITY_SET, 
             select=select or None, 
             filter_query=filter_query or None, 
             fetch_all=True,
             max_records=actual_top
         )
+        records = result_dict.get("value", [])
         
         key_fields = [c.strip() for c in select.split(",")] if select else None
         result = summarizer.summarize_records(

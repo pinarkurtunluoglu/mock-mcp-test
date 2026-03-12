@@ -88,8 +88,14 @@ class DataverseClient:
         path = f"EntityDefinitions(LogicalName='{table_name}')?$expand=Attributes($select=LogicalName,AttributeType,DisplayName)"
         return await self._request("GET", path)
 
-    async def query_table(self, entity_set: str, **kwargs) -> list[dict[str, Any]]:
-        """Queries records from an entity set with support for pagination."""
+    async def query_table(self, entity_set: str, **kwargs) -> dict[str, Any]:
+        """Queries records from an entity set with support for pagination (skiptoken)."""
+        if next_link := kwargs.get("next_link"):
+            # If a full nextLink or skiptoken path is provided, use it
+            marker = "/api/data/v9.2/"
+            current_path = next_link.split(marker)[1] if marker in next_link else next_link
+            return await self._request("GET", current_path)
+            
         params = []
         if select := kwargs.get("select"):
             params.append(f"$select={select}")
@@ -105,17 +111,14 @@ class DataverseClient:
         
         if top and not fetch_all:
             params.append(f"$top={top}")
-        if skip := kwargs.get("skip"):
-            params.append(f"$skip={skip}")
             
         query_string = "&".join(params)
         path = f"{entity_set}?{query_string}" if query_string else entity_set
         
         if fetch_all:
-            return await self.fetch_all_records(path, max_records=kwargs.get("max_records", 5000))
+            return {"value": await self.fetch_all_records(path, max_records=kwargs.get("max_records", 5000))}
         
-        result = await self._request("GET", path)
-        return result.get("value", [])
+        return await self._request("GET", path)
 
     async def fetch_all_records(self, initial_path: str, max_records: int = 5000) -> list[dict[str, Any]]:
         """Fetches all records by following pagination links up to max_records."""
@@ -219,7 +222,7 @@ class DataverseClient:
         response.raise_for_status()
         return int(response.text.strip().lstrip('\ufeff'))
 
-    async def search_records(self, entity_set: str, search_field: str, search_term: str, **kwargs) -> list[dict[str, Any]]:
+    async def search_records(self, entity_set: str, search_field: str, search_term: str, **kwargs) -> dict[str, Any]:
         """Searches for records using a filter."""
         filter_query = f"contains({search_field}, '{search_term}')"
         if existing_filter := kwargs.get("filter_query"):
