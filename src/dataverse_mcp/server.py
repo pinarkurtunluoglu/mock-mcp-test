@@ -51,6 +51,55 @@ async def _ensure_latest_date_filter(filter_query: str = "") -> str:
     except Exception:
         return filter_query or ""
 
+# ── Robust Search Helper ──────────────────────────────────
+def _apply_robust_search(search_field: str, term: str) -> str:
+    """Generates a robust OData filter for Turkish search terms.
+    - Strips common suffixes (Tesisi, Deposu, etc.)
+    - Handles Turkish specific casing (i/İ, ı/I)
+    """
+    if not term:
+        return ""
+
+    def tr_upper(s: str) -> str:
+        return s.replace("i", "İ").replace("ı", "I").upper()
+
+    def tr_capitalize(s: str) -> str:
+        if not s: return s
+        upper_s = tr_upper(s)
+        return upper_s[0] + s[1:].lower()
+
+    # Common Turkish site/facility suffixes to strip
+    suffixes = [
+        "tesisi", "tesisleri", "deposu", "antreposu", "fabrikası", 
+        "şubesi", "müdürlüğü", "ofisi", "limanı", "antrepo"
+    ]
+    
+    # Basic normalization
+    term = term.strip().lower()
+    
+    # Strip suffixes from the end
+    root_term = term
+    for suffix in suffixes:
+        if root_term.endswith(f" {suffix}"):
+            root_term = root_term[:-len(suffix)].strip()
+            break
+            
+    # Generate variations
+    variations = set()
+    variations.add(tr_capitalize(root_term))
+    variations.add(tr_upper(root_term))
+    
+    # Also include the original term as variations if it was different
+    if root_term != term:
+        variations.add(tr_capitalize(term))
+        variations.add(tr_upper(term))
+    
+    # Build OR filter
+    filter_parts = [f"contains({search_field}, '{v}')" for v in variations if v]
+    if not filter_parts:
+        return ""
+    return f"({' or '.join(filter_parts)})"
+
 # ── Settings & Dependencies ─────────────────────────────
 settings = get_settings()
 
@@ -258,11 +307,21 @@ async def search_inventory_aging(
         # Auto-correct and enforce date
         search_field = fix_column(search_field)
         select = fix_select(select)
-        filter_query = await _ensure_latest_date_filter("")
         
-        result_dict = await client.search_records(
-            ENTITY_SET, search_field=search_field, search_term=search_term,
-            select=select or None, top=top, filter_query=filter_query,
+        # Apply robust search filter
+        robust_filter = _apply_robust_search(search_field, search_term)
+        base_filter = await _ensure_latest_date_filter("")
+        
+        if base_filter:
+            final_filter = f"({base_filter}) and {robust_filter}"
+        else:
+            final_filter = robust_filter
+        
+        result_dict = await client.query_table(
+            ENTITY_SET,
+            select=select or None,
+            filter_query=final_filter,
+            top=top,
             next_link=next_token or None
         )
         records = result_dict.get("value", [])
