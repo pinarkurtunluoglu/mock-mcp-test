@@ -75,18 +75,58 @@ def fix_select(select: str) -> str:
     return ",".join(fixed_cols)
 
 
+_TEXT_COLUMNS: set[str] = {
+    "mserp_itemname",
+    "mserp_inventsitename",
+    "mserp_inventlocationname",
+    "mserp_companyname",
+    "mserp_etgproductlevel03name",
+}
+
+
+def _tr_upper(s: str) -> str:
+    return s.replace("i", "İ").replace("ı", "I").upper()
+
+
+def _tr_capitalize(s: str) -> str:
+    if not s:
+        return s
+    return _tr_upper(s)[0] + s[1:].lower()
+
+
+def _expand_turkish_contains(filter_query: str) -> str:
+    """Expands contains() on text columns to include Turkish case variations.
+
+    contains(mserp_inventsitename, 'muş')
+      → (contains(mserp_inventsitename, 'Muş') or contains(mserp_inventsitename, 'MUŞ'))
+    """
+    def replace_match(match: re.Match) -> str:
+        col = match.group(1).strip()
+        val = match.group(2)
+
+        if col not in _TEXT_COLUMNS:
+            return match.group(0)
+
+        variations = list(dict.fromkeys([_tr_capitalize(val), _tr_upper(val), val]))
+        parts = [f"contains({col}, '{v}')" for v in variations if v]
+        return f"({' or '.join(parts)})" if len(parts) > 1 else match.group(0)
+
+    pattern = re.compile(r"contains\(\s*(\w+)\s*,\s*'([^']*)'\s*\)", re.IGNORECASE)
+    return pattern.sub(replace_match, filter_query)
+
+
 def fix_filter(filter_query: str) -> str:
-    """Fixes column names inside an OData $filter expression. Discards alias if target not in whitelist."""
+    """Fixes column names inside an OData $filter expression and expands Turkish case variations."""
     if not filter_query:
         return filter_query
-    
+
     result = filter_query
     for wrong, correct in COLUMN_ALIASES.items():
         if correct in ALLOWED_COLUMNS:
-            # Replace whole-word matches only (case-insensitive) using word boundaries
             pattern = re.compile(rf"\b{re.escape(wrong)}\b", re.IGNORECASE)
             result = pattern.sub(correct, result)
-    return result
+
+    return _expand_turkish_contains(result)
 
 
 def fix_group_by(group_by: str) -> str:

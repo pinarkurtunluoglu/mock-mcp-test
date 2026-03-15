@@ -183,8 +183,8 @@ formatter = DataFormatter()
 
 @mcp.tool()
 async def get_inventory_aging_schema() -> str:
-    """Returns the schema (columns and data types) of the Inventory Aging Report table.
-    Only essential business columns are returned to ensure focus."""
+    """Envanter Yaşlandırma Raporu tablosunun şemasını (sütunlar ve veri tipleri) döndürür.
+    Yalnızca iş açısından önemli sütunlar gösterilir."""
     try:
         schema = await client.get_table_schema(ENTITY_LOGICAL)
         return guard(formatter.format_schema(schema))
@@ -194,8 +194,8 @@ async def get_inventory_aging_schema() -> str:
 
 @mcp.tool()
 async def get_inventory_aging_count(filter_query: str = "") -> str:
-    """Returns the total number of records in the Inventory Aging Report.
-    If no date is specified, it returns the count for the LATEST report date.
+    """Envanter Yaşlandırma Raporu'ndaki toplam kayıt sayısını döndürür.
+    Tarih belirtilmezse EN SON rapor tarihindeki kayıt sayısını verir.
     """
     try:
         filter_query = fix_filter(filter_query)
@@ -211,9 +211,9 @@ async def get_inventory_aging_count(filter_query: str = "") -> str:
 
 @mcp.tool()
 async def get_latest_report_date() -> str:
-    """Returns the most recent report date (mserp_headerreportdate) available in the dataset.
-    ALWAYS call this FIRST when the user does not specify a date.
-    Use the returned date in filter_query like: mserp_headerreportdate eq <date>
+    """Veri setindeki en güncel rapor tarihini (mserp_headerreportdate) döndürür.
+    Kullanıcı tarih belirtmediğinde ÖNCE bu tool çağrılmalıdır.
+    Dönen tarihi filter_query içinde şu şekilde kullanın: mserp_headerreportdate eq <tarih>
     """
     try:
         result = await client.aggregate_table(
@@ -236,15 +236,15 @@ async def query_inventory_aging(
     top: int = 50,
     next_token: str = "",
 ) -> str:
-    """Returns raw records from the Inventory Aging Report. Use `next_token` for "scrolling".
-    F&O Virtual Entities do NOT support `skip`. They only support `next_token` (skiptoken).
+    """Envanter Yaşlandırma Raporu'ndan ham kayıtları döndürür. Sayfalama için `next_token` kullanın.
+    F&O Sanal Entity'leri `skip` desteklemez; yalnızca `next_token` (skiptoken) desteklenir.
 
     Args:
-        select: Comma-separated columns (e.g. 'mserp_itemname,mserp_qty').
-        filter_query: OData $filter (e.g. "contains(mserp_itemname, 'BUĞDAY')").
-        orderby: OData $orderby (e.g. "mserp_qty desc").
-        top: Max records per page (default: 50, max: 500).
-        next_token: The pagination token from the previous response to see the next page.
+        select: Virgülle ayrılmış sütun adları (örn. 'mserp_itemname,mserp_qty').
+        filter_query: OData $filter ifadesi (örn. "contains(mserp_itemname, 'BUĞDAY')").
+        orderby: OData $orderby ifadesi (örn. "mserp_qty desc").
+        top: Sayfa başına maksimum kayıt sayısı (varsayılan: 50, maks: 500).
+        next_token: Bir sonraki sayfayı getirmek için önceki yanıttaki sayfalama token'ı.
     """
     try:
         if top > 500:
@@ -293,15 +293,15 @@ async def search_inventory_aging(
     top: int = 20,
     next_token: str = "",
 ) -> str:
-    """Searches for records using a keyword. Use `next_token` for more results.
-    Always use Name columns (e.g. mserp_companyname, NOT mserp_companyid).
+    """Anahtar kelimeyle kayıt arar. Daha fazla sonuç için `next_token` kullanın.
+    Her zaman isim sütunlarını kullanın (örn. mserp_companyname, mserp_companyid DEĞİL).
 
     Args:
-        search_field: Column to search in (e.g. 'mserp_itemname', 'mserp_companyname').
-        search_term: Value to search for (case-insensitive).
-        select: Comma-separated columns to return.
-        top: Max results per page (default: 20).
-        next_token: Pagination token for the next page of results.
+        search_field: Aranacak sütun adı (örn. 'mserp_itemname', 'mserp_companyname').
+        search_term: Aranacak değer (büyük/küçük harf duyarsız).
+        select: Döndürülecek virgülle ayrılmış sütun adları.
+        top: Sayfa başına maksimum sonuç sayısı (varsayılan: 20).
+        next_token: Sonraki sayfa için sayfalama token'ı.
     """
     try:
         # Auto-correct and enforce date
@@ -340,11 +340,11 @@ async def search_inventory_aging(
 
 @mcp.tool()
 async def get_inventory_aging_record(record_id: str, select: str = "") -> str:
-    """Retrieves a single Inventory Aging Report record by its unique ID (GUID).
+    """Benzersiz ID (GUID) ile Envanter Yaşlandırma Raporu'ndan tek bir kayıt getirir.
 
     Args:
-        record_id: The GUID of the record to retrieve.
-        select: Comma-separated column names to return. Leave empty for all columns.
+        record_id: Getirilecek kaydın GUID değeri.
+        select: Döndürülecek virgülle ayrılmış sütun adları. Boş bırakılırsa tüm sütunlar döner.
     """
     try:
         record = await client.get_record(
@@ -362,15 +362,15 @@ async def summarize_inventory_aging(
     top: int = 2000,
     sample_size: int = 5,
 ) -> str:
-    """Generates a statistical summary from a SAMPLE of records (max 5000).
-    Use ONLY for showing patterns and examples — NEVER for calculating totals or insights.
-    For accurate totals, use calculate_inventory_totals instead.
+    """Kayıtların bir ÖRNEK'inden istatistiksel özet üretir (maks. 5000 kayıt).
+    YALNIZCA örüntü ve örnekleri göstermek için kullanın — toplam hesaplamak için KULLANMAYIN.
+    Doğru toplamlar için bunun yerine calculate_inventory_totals kullanın.
 
     Args:
-        select: Comma-separated fields to analyze (e.g. 'mserp_qty,mserp_itemname').
-        filter_query: OData $filter to narrow data before sampling.
-        top: Sample size (default: 2000, max: 5000).
-        sample_size: Number of example records to display (default: 5).
+        select: Analiz edilecek virgülle ayrılmış sütunlar (örn. 'mserp_qty,mserp_itemname').
+        filter_query: Örnekleme öncesi veriyi daraltmak için OData $filter ifadesi.
+        top: Örnek boyutu (varsayılan: 2000, maks: 5000).
+        sample_size: Gösterilecek örnek kayıt sayısı (varsayılan: 5).
     """
     try:
         # Cap at 5000 for safety but allow deep analysis
@@ -408,16 +408,16 @@ async def calculate_inventory_totals(
     filter_query: str = "",
     top_n: int = 50,
 ) -> str:
-    """Server-side aggregation across the ENTIRE dataset (~500k records). No rows downloaded.
-    THIS IS THE PRIMARY TOOL for all totals, averages, counts, trends, and insights.
-    Call MULTIPLE TIMES with different group_by values for multi-dimensional analysis.
+    """TÜM veri seti (~500k kayıt) üzerinde sunucu taraflı agregasyon yapar. Hiç satır indirilmez.
+    Tüm toplamlar, ortalamalar, sayımlar, trendler ve içgörüler için BİRİNCİL ARAÇ budur.
+    Çok boyutlu analiz için farklı group_by değerleriyle DEFALARCA çağrılabilir.
 
     Args:
-        numeric_field: Column to aggregate (e.g. 'mserp_qty', 'mserp_purchfifo'). Leave empty for count.
-        agg_type: One of: 'sum', 'average', 'min', 'max', 'count'.
-        group_by: ONE column to group by. See Field Catalog in instructions for valid names.
-        filter_query: OData $filter to narrow scope (e.g. "contains(mserp_companyname, 'MESQ')").
-        top_n: Max number of grouped rows to return, sorted by aggregate value (default: 50).
+        numeric_field: Agregasyon yapılacak sütun (örn. 'mserp_qty', 'mserp_purchfifo'). Sayım için boş bırakın.
+        agg_type: Şunlardan biri: 'sum', 'average', 'min', 'max', 'count'.
+        group_by: Gruplamak için TEK bir sütun. Geçerli adlar için talimatlardaki Alan Kataloğuna bakın.
+        filter_query: Kapsamı daraltmak için OData $filter (örn. "contains(mserp_companyname, 'MESQ')").
+        top_n: Döndürülecek maksimum gruplu satır sayısı, agregasyon değerine göre sıralı (varsayılan: 50).
     """
     try:
         # Auto-correct hallucinated column names
@@ -476,12 +476,12 @@ async def calculate_multi_metrics(
     numeric_field: str,
     filter_query: str = "",
 ) -> str:
-    """Calculates SUM, AVERAGE, MIN, MAX, and COUNT for a field in ONE call (runs in parallel).
-    This is the FASTEST way to get multiple statistics for the LATEST report date.
+    """Bir alan için TOPLAM, ORTALAMA, MİN, MAKS ve SAYI değerlerini TEK çağrıda hesaplar (paralel çalışır).
+    EN SON rapor tarihi için birden fazla istatistik almanın EN HIZLI yoludur.
 
     Args:
-        numeric_field: Column to analyze (e.g. 'mserp_qty', 'mserp_purchfifo').
-        filter_query: OData $filter to narrow scope.
+        numeric_field: Analiz edilecek sütun (örn. 'mserp_qty', 'mserp_purchfifo').
+        filter_query: Kapsamı daraltmak için OData $filter ifadesi.
     """
     try:
         numeric_field = fix_column(numeric_field)
@@ -535,14 +535,14 @@ async def calculate_weighted_average(
     group_by: str = "",
     filter_query: str = "",
 ) -> str:
-    """Calculates WEIGHTED AVERAGE (e.g., true inventory age) across the ENTIRE dataset.
-    This is much more accurate than arithmetic average for inventory age.
-    
+    """TÜM veri seti üzerinde AĞIRLIKLI ORTALAMA hesaplar (örn. gerçek envanter yaşı).
+    Envanter yaşı için aritmetik ortalamadan çok daha doğru sonuç verir.
+
     Args:
-        value_field: The column to average (default: 'mserp_purchfifo' - inventory age).
-        weight_field: The column to use as weight (default: 'mserp_qty' - quantity).
-        group_by: Optional column to group results by (e.g. 'mserp_companyname', 'mserp_inventsitename').
-        filter_query: OData $filter to narrow scope.
+        value_field: Ortalaması alınacak sütun (varsayılan: 'mserp_purchfifo' - envanter yaşı).
+        weight_field: Ağırlık olarak kullanılacak sütun (varsayılan: 'mserp_qty' - miktar).
+        group_by: Sonuçları gruplamak için isteğe bağlı sütun (örn. 'mserp_companyname', 'mserp_inventsitename').
+        filter_query: Kapsamı daraltmak için OData $filter ifadesi.
     """
     try:
         value_field = fix_column(value_field)
