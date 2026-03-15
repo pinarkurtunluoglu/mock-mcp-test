@@ -99,12 +99,15 @@ def _tr_title(s: str) -> str:
 
 
 def _expand_turkish_contains(filter_query: str) -> str:
-    """Expands contains() on text columns to include Turkish case variations.
+    """Expands contains() and eq on text columns to include Turkish case variations.
 
     contains(mserp_inventsitename, 'muş')
       → (contains(mserp_inventsitename, 'Muş') or contains(mserp_inventsitename, 'MUŞ'))
+
+    mserp_inventsitename eq 'MUŞ'
+      → (contains(mserp_inventsitename, 'Muş') or contains(mserp_inventsitename, 'MUŞ'))
     """
-    def replace_match(match: re.Match) -> str:
+    def replace_contains(match: re.Match) -> str:
         col = match.group(1).strip()
         val = match.group(2)
 
@@ -115,8 +118,20 @@ def _expand_turkish_contains(filter_query: str) -> str:
         parts = [f"contains({col}, '{v}')" for v in variations if v]
         return f"({' or '.join(parts)})" if len(parts) > 1 else match.group(0)
 
-    pattern = re.compile(r"contains\(\s*(\w+)\s*,\s*'([^']*)'\s*\)", re.IGNORECASE)
-    return pattern.sub(replace_match, filter_query)
+    def replace_eq(match: re.Match) -> str:
+        col = match.group(1).strip()
+        val = match.group(2)
+
+        if col not in _TEXT_COLUMNS:
+            return match.group(0)
+
+        variations = list(dict.fromkeys([_tr_title(val), _tr_capitalize(val), _tr_upper(val), val]))
+        parts = [f"contains({col}, '{v}')" for v in variations if v]
+        return f"({' or '.join(parts)})" if len(parts) > 1 else match.group(0)
+
+    result = re.compile(r"contains\(\s*(\w+)\s*,\s*'([^']*)'\s*\)", re.IGNORECASE).sub(replace_contains, filter_query)
+    result = re.compile(r"\b(\w+)\s+eq\s+'([^']+)'", re.IGNORECASE).sub(replace_eq, result)
+    return result
 
 
 def fix_filter(filter_query: str) -> str:
