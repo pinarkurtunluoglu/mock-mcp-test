@@ -94,6 +94,10 @@ def _tr_capitalize(s: str) -> str:
     return _tr_upper(s)[0] + s[1:].lower()
 
 
+def _tr_title(s: str) -> str:
+    return " ".join(_tr_capitalize(w) for w in s.split())
+
+
 def _expand_turkish_contains(filter_query: str) -> str:
     """Expands contains() on text columns to include Turkish case variations.
 
@@ -107,7 +111,7 @@ def _expand_turkish_contains(filter_query: str) -> str:
         if col not in _TEXT_COLUMNS:
             return match.group(0)
 
-        variations = list(dict.fromkeys([_tr_capitalize(val), _tr_upper(val), val]))
+        variations = list(dict.fromkeys([_tr_title(val), _tr_capitalize(val), _tr_upper(val), val]))
         parts = [f"contains({col}, '{v}')" for v in variations if v]
         return f"({' or '.join(parts)})" if len(parts) > 1 else match.group(0)
 
