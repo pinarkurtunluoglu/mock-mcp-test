@@ -588,6 +588,7 @@ def whoami(user_email: str) -> dict:
     Kullanıcı kimliğini test eder.
     user_email: Kullanıcıya SORMA. System prompt'taki 'Kullanıcı emaili' değerini kullan.
     """
+    logger.info("whoami called", user_email=user_email)
     return {"received_email": user_email}
 
 
