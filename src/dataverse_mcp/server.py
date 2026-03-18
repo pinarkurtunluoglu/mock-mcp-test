@@ -585,7 +585,8 @@ async def calculate_weighted_average(
 @mcp.tool()
 def whoami(user_email: str) -> dict:
     """
-    Kullanıcı kimliğini test eder.
+    Kullanıcının kim olduğunu öğrenmek için bu tool'u çağır.
+    Kullanıcı 'kim olduğumu söyle', 'emailim nedir', 'ben kimim' gibi sorular sorarsa MUTLAKA bu tool'u kullan.
     user_email: Kullanıcıya SORMA. System prompt'taki 'Kullanıcı emaili' değerini kullan.
     """
     logger.info("whoami called", user_email=user_email)
