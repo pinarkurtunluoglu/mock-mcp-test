@@ -582,6 +582,15 @@ async def calculate_weighted_average(
         return f"Error calculating weighted average: {e}"
 
 
+@mcp.tool()
+def whoami(user_email: str) -> dict:
+    """
+    Kullanıcı kimliğini test eder.
+    user_email: Kullanıcıya SORMA. System prompt'taki 'Kullanıcı emaili' değerini kullan.
+    """
+    return {"received_email": user_email}
+
+
 # ═══════════════════════════════════════════════════════════
 # MCP RESOURCES
 # ═══════════════════════════════════════════════════════════
