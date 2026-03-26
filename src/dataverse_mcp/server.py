@@ -108,6 +108,7 @@ mcp = FastMCP(
         "- 'kategori' / 'grup' → use `mserp_etgproductlevel03name`\n"
         "- 'tesis' / 'depo' / 'site' → use `mserp_inventsitename`\n"
         "- 'şirket' / 'firma' → use `mserp_companyname`\n"
+        "- **'fiyat' / 'tutar' / 'değer' / 'maliyet' / 'toplam değer'** → use `mserp_purchfifo` — this is the ONLY financial/cost field available. There is NO `mserp_amountmst`, `mserp_cost`, or `mserp_price`.\n"
         "- **'ortalama yaş' (average age)** → ALWAYS use `calculate_weighted_average` with `mserp_purchfifo` weighted by `mserp_qty`.\n\n"
 
         # ── FILTERING RULES — NO EXCEPTIONS ──────────────────
@@ -118,7 +119,8 @@ mcp = FastMCP(
         "4. **DATE RANGES**: NEVER use OData date functions like `month()`, `year()`, `day()` — they are NOT supported by F&O Virtual Entities. "
         "Use ISO date range instead: 'Bu ay' → `mserp_headerreportdate ge 2026-03-01 and mserp_headerreportdate le 2026-03-31`. "
         "'Belirli bir tarih' → `mserp_headerreportdate eq 2026-03-14`.\n"
-        "5. **TURKISH CHARS**: Dataverse search is SENSITIVE to Turkish characters. If searching for Muş, use exact 'Muş' or 'MUŞ' in `contains()`. NEVER swap 'Ş' for 'S'.\n\n"
+        "5. **TURKISH CHARS**: Dataverse search is SENSITIVE to Turkish characters. If searching for Muş, use exact 'Muş' or 'MUŞ' in `contains()`. NEVER swap 'Ş' for 'S'.\n"
+        "6. **FINANCIAL FIELD**: There is NO `mserp_amountmst`, `mserp_cost`, `mserp_price`. The ONLY financial/value field is `mserp_purchfifo`. Use it for: fiyat, tutar, değer, maliyet, toplam değer. If a tool returns COLUMN NOT FOUND, switch to mserp_purchfifo immediately.\n\n"
 
         # ── UNIVERSAL DATA AWARENESS ──────────────────────────
         "## Universal Data Awareness — How you 'see' everything\n"
@@ -482,11 +484,19 @@ async def calculate_inventory_totals(
     """
     try:
         # Auto-correct hallucinated column names
-        numeric_field = fix_column(numeric_field) if numeric_field else numeric_field
+        if numeric_field:
+            fixed = fix_column(numeric_field)
+            if fixed is None:
+                return (
+                    f"COLUMN NOT FOUND: '{numeric_field}' is not a valid column. "
+                    f"Available numeric fields: mserp_qty (quantity), mserp_purchfifo (FIFO cost/value). "
+                    f"For financial value/price/cost queries use numeric_field='mserp_purchfifo'."
+                )
+            numeric_field = fixed
         group_by = fix_group_by(group_by)
         filter_query = fix_filter(filter_query)
         filter_query = await _ensure_latest_date_filter(filter_query)
-        
+
         result = await client.aggregate_table(
             ENTITY_SET, numeric_field, agg_type,
             filter_query=filter_query, group_by=group_by,
@@ -554,7 +564,14 @@ async def calculate_multi_metrics(
         filter_query: Kapsamı daraltmak için OData $filter ifadesi.
     """
     try:
-        numeric_field = fix_column(numeric_field)
+        fixed = fix_column(numeric_field)
+        if fixed is None:
+            return (
+                f"COLUMN NOT FOUND: '{numeric_field}' is not a valid column. "
+                f"Available numeric fields: mserp_qty (quantity), mserp_purchfifo (FIFO cost/value). "
+                f"For financial value/price/cost queries use numeric_field='mserp_purchfifo'."
+            )
+        numeric_field = fixed
         filter_query = fix_filter(filter_query)
         filter_query = await _ensure_latest_date_filter(filter_query)
 
@@ -627,12 +644,24 @@ async def calculate_weighted_average(
         filter_query: Kapsamı daraltmak için OData $filter ifadesi.
     """
     try:
-        value_field = fix_column(value_field)
-        weight_field = fix_column(weight_field)
+        fixed_val = fix_column(value_field)
+        if fixed_val is None:
+            return (
+                f"COLUMN NOT FOUND: '{value_field}' is not a valid column. "
+                f"Available numeric fields: mserp_qty (quantity), mserp_purchfifo (FIFO cost/value)."
+            )
+        value_field = fixed_val
+        fixed_wt = fix_column(weight_field)
+        if fixed_wt is None:
+            return (
+                f"COLUMN NOT FOUND: '{weight_field}' is not a valid weight column. "
+                f"Use mserp_qty for quantity-based weighting."
+            )
+        weight_field = fixed_wt
         group_by = fix_group_by(group_by)
         filter_query = fix_filter(filter_query)
         filter_query = await _ensure_latest_date_filter(filter_query)
-        
+
         result = await client.calculate_weighted_average(
             ENTITY_SET,
             value_field=value_field,

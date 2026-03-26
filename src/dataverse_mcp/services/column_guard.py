@@ -54,6 +54,17 @@ COLUMN_ALIASES: dict[str, str] = {
     # Date
     "mserp_reportdate": "mserp_headerreportdate",
     "mserp_date": "mserp_headerreportdate",
+    # Financial Value / FIFO Cost (mserp_purchfifo is the only financial field)
+    "mserp_amount": "mserp_purchfifo",
+    "mserp_amountmst": "mserp_purchfifo",
+    "mserp_cost": "mserp_purchfifo",
+    "mserp_price": "mserp_purchfifo",
+    "mserp_value": "mserp_purchfifo",
+    "mserp_fifo": "mserp_purchfifo",
+    "mserp_purchprice": "mserp_purchfifo",
+    "mserp_totalcost": "mserp_purchfifo",
+    "mserp_totalamount": "mserp_purchfifo",
+    "mserp_inventvalue": "mserp_purchfifo",
 }
 
 
