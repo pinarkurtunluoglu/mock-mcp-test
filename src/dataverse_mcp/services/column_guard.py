@@ -13,6 +13,7 @@ from itertools import product as _iproduct
 ALLOWED_COLUMNS: set[str] = {
     "mserp_itemname",
     "mserp_itemid",
+    "mserp_etgproductlevel02name",
     "mserp_etgproductlevel03name",
     "mserp_qty",
     "mserp_purchfifo",
@@ -46,11 +47,21 @@ COLUMN_ALIASES: dict[str, str] = {
     "mserp_productname": "mserp_itemname",
     "mserp_item": "mserp_itemname",
     "mserp_itemnamename": "mserp_itemname",
-    # Product Category
+    # Product Category Level 2 (Ana Grup / Main Group e.g. 'Tahıl')
+    "mserp_etgproductlevel02": "mserp_etgproductlevel02name",
+    "mserp_level02": "mserp_etgproductlevel02name",
+    "mserp_level2": "mserp_etgproductlevel02name",
+    "mserp_anagruop": "mserp_etgproductlevel02name",
+    "mserp_anagrup": "mserp_etgproductlevel02name",
+    "mserp_maingroup": "mserp_etgproductlevel02name",
+    # Product Category Level 3 (Alt Grup / Sub Group e.g. 'Buğday')
     "mserp_category": "mserp_etgproductlevel03name",
     "mserp_productcategory": "mserp_etgproductlevel03name",
     "mserp_etgproductlevel03": "mserp_etgproductlevel03name",
     "mserp_productlevel": "mserp_etgproductlevel03name",
+    "mserp_subgroup": "mserp_etgproductlevel03name",
+    "mserp_level03": "mserp_etgproductlevel03name",
+    "mserp_level3": "mserp_etgproductlevel03name",
     # Date
     "mserp_reportdate": "mserp_headerreportdate",
     "mserp_date": "mserp_headerreportdate",
@@ -92,6 +103,7 @@ _TEXT_COLUMNS: set[str] = {
     "mserp_inventsitename",
     "mserp_inventlocationname",
     "mserp_companyname",
+    "mserp_etgproductlevel02name",
     "mserp_etgproductlevel03name",
 }
 

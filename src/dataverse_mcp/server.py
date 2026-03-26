@@ -93,7 +93,8 @@ mcp = FastMCP(
         "|---|---|---|\n"
         "| Product Name | mserp_itemname | Full product name (Turkish text) |\n"
         "| Product Code | mserp_itemid | Short code like 10IQ4112 |\n"
-        "| Product Category | mserp_etgproductlevel03name | e.g. Wheat, Corn |\n"
+        "| Product Group (Level 2) | mserp_etgproductlevel02name | Ana grup e.g. Tahıl, Bakliyat, Yağlı Tohumlar |\n"
+        "| Product Category (Level 3) | mserp_etgproductlevel03name | Alt grup e.g. Buğday, Nohut, Mısır |\n"
         "| Quantity | mserp_qty | Inventory quantity (numeric) |\n"
         "| FIFO Age (days) | mserp_purchfifo | Days since purchase (FIFO) |\n"
         "| Report Date | mserp_headerreportdate | Use for ALL date filtering |\n"
@@ -105,7 +106,8 @@ mcp = FastMCP(
         "## Turkish → Column Mapping\n"
         "When the user says:\n"
         "- 'ürün' / 'malzeme' / 'isim' → use `mserp_itemname`\n"
-        "- 'kategori' / 'grup' → use `mserp_etgproductlevel03name`\n"
+        "- 'ana grup' / 'ürün grubu' / 'seviye 2' / 'tahıl' / 'bakliyat' → use `mserp_etgproductlevel02name`\n"
+        "- 'alt kategori' / 'kategori' / 'seviye 3' / 'ürün kategorisi' → use `mserp_etgproductlevel03name`\n"
         "- 'tesis' / 'depo' / 'site' → use `mserp_inventsitename`\n"
         "- 'şirket' / 'firma' → use `mserp_companyname`\n"
         "- **'fiyat' / 'tutar' / 'değer' / 'maliyet' / 'toplam değer'** → use `mserp_purchfifo` — this is the ONLY financial/cost field available. There is NO `mserp_amountmst`, `mserp_cost`, or `mserp_price`.\n"
@@ -463,7 +465,9 @@ async def calculate_inventory_totals(
     - 'Tesis bazında stok kırılımı' → agg_type=sum, group_by=mserp_inventsitename
     - 'Şirket bazında ortalama yaş' → numeric_field=mserp_purchfifo, agg_type=average, group_by=mserp_companyname
     - 'Kaç farklı ürün var?' → agg_type=count, group_by=mserp_itemname
-    - 'Kategori bazında toplam miktar' → group_by=mserp_etgproductlevel03name
+    - 'Ana grup (Seviye 2) bazında toplam miktar' → group_by=mserp_etgproductlevel02name
+    - 'Alt kategori (Seviye 3) bazında toplam miktar' → group_by=mserp_etgproductlevel03name
+    - 'Tahıl grubunun toplam değeri' → filter_query="contains(mserp_etgproductlevel02name,'Tah')", numeric_field=mserp_purchfifo
     - Çok boyutlu analiz için farklı group_by değerleriyle DEFALARCA çağır.
 
     KULLANMA:
