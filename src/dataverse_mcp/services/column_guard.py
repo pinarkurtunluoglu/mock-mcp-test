@@ -88,10 +88,14 @@ def _tr_upper(s: str) -> str:
     return s.replace("i", "İ").replace("ı", "I").upper()
 
 
+def _tr_lower(s: str) -> str:
+    return s.replace("İ", "i").replace("I", "ı").lower()
+
+
 def _tr_capitalize(s: str) -> str:
     if not s:
         return s
-    return _tr_upper(s)[0] + s[1:].lower()
+    return _tr_upper(s)[0] + _tr_lower(s)[1:]
 
 
 def _tr_title(s: str) -> str:
@@ -107,26 +111,29 @@ def _expand_turkish_contains(filter_query: str) -> str:
     mserp_inventsitename eq 'MUŞ'
       → (contains(mserp_inventsitename, 'Muş') or contains(mserp_inventsitename, 'MUŞ'))
     """
+    def _make_variations(val: str) -> list[str]:
+        # Turkish-aware variants + standard ASCII variants to cover both
+        # e.g. 'GAZIANTEP' → _tr_lower gives 'gazıantep' (Turkish ı) but data may have 'gaziantep' (Latin i)
+        return list(dict.fromkeys([
+            _tr_title(val), _tr_capitalize(val), _tr_upper(val), _tr_lower(val),
+            val.title(), val.lower(),  # standard ASCII fallbacks
+            val,
+        ]))
+
     def replace_contains(match: re.Match) -> str:
         col = match.group(1).strip()
         val = match.group(2)
-
         if col not in _TEXT_COLUMNS:
             return match.group(0)
-
-        variations = list(dict.fromkeys([_tr_title(val), _tr_capitalize(val), _tr_upper(val), val]))
-        parts = [f"contains({col}, '{v}')" for v in variations if v]
+        parts = [f"contains({col}, '{v}')" for v in _make_variations(val) if v]
         return f"({' or '.join(parts)})" if len(parts) > 1 else match.group(0)
 
     def replace_eq(match: re.Match) -> str:
         col = match.group(1).strip()
         val = match.group(2)
-
         if col not in _TEXT_COLUMNS:
             return match.group(0)
-
-        variations = list(dict.fromkeys([_tr_title(val), _tr_capitalize(val), _tr_upper(val), val]))
-        parts = [f"contains({col}, '{v}')" for v in variations if v]
+        parts = [f"contains({col}, '{v}')" for v in _make_variations(val) if v]
         return f"({' or '.join(parts)})" if len(parts) > 1 else match.group(0)
 
     result = re.compile(r"contains\(\s*(\w+)\s*,\s*'([^']*)'\s*\)", re.IGNORECASE).sub(replace_contains, filter_query)
