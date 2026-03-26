@@ -6,6 +6,7 @@ Best practice: Never trust the AI to use exact column names. Intercept and fix a
 from __future__ import annotations
 
 import re
+from itertools import product as _iproduct
 
 # ── Allowed Columns ───────────────────────────────────────
 # ONLY these columns from the Field Catalog are allowed.
@@ -112,11 +113,18 @@ def _expand_turkish_contains(filter_query: str) -> str:
       → (contains(mserp_inventsitename, 'Muş') or contains(mserp_inventsitename, 'MUŞ'))
     """
     def _make_variations(val: str) -> list[str]:
-        # Turkish-aware variants + standard ASCII variants to cover both
-        # e.g. 'GAZIANTEP' → _tr_lower gives 'gazıantep' (Turkish ı) but data may have 'gaziantep' (Latin i)
+        # For multi-word terms like 'GAZIANTEP DIŞ', each word may need different
+        # casing: 'Gaziantep' (Latin i) vs 'Dış' (Turkish ı). Generate cross-product
+        # of per-word Turkish/standard title variants to cover all combinations.
+        words = val.split()
+        per_word = [list(dict.fromkeys([_tr_capitalize(w), w.title()])) for w in words]
+        title_variants = [" ".join(combo) for combo in _iproduct(*per_word)]
+
         return list(dict.fromkeys([
-            _tr_title(val), _tr_capitalize(val), _tr_upper(val), _tr_lower(val),
-            val.title(), val.lower(),  # standard ASCII fallbacks
+            *title_variants,
+            _tr_upper(val),
+            _tr_lower(val),
+            val.lower(),
             val,
         ]))
 
