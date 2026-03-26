@@ -53,52 +53,24 @@ async def _ensure_latest_date_filter(filter_query: str = "") -> str:
 
 # ── Robust Search Helper ──────────────────────────────────
 def _apply_robust_search(search_field: str, term: str) -> str:
-    """Generates a robust OData filter for Turkish search terms.
-    - Strips common suffixes (Tesisi, Deposu, etc.)
-    - Handles Turkish specific casing (i/İ, ı/I)
-    """
+    """Generates a Turkish-aware OData contains() filter with all case variants."""
     if not term:
         return ""
 
     def tr_upper(s: str) -> str:
         return s.replace("i", "İ").replace("ı", "I").upper()
 
-    def tr_capitalize(s: str) -> str:
-        if not s: return s
-        upper_s = tr_upper(s)
-        return upper_s[0] + s[1:].lower()
+    def tr_cap(s: str) -> str:
+        if not s:
+            return s
+        return tr_upper(s)[0] + s[1:].lower()
 
-    # Common Turkish site/facility suffixes to strip
-    suffixes = [
-        "tesisi", "tesisleri", "deposu", "antreposu", "fabrikası", 
-        "şubesi", "müdürlüğü", "ofisi", "limanı", "antrepo"
-    ]
-    
-    # Basic normalization
-    term = term.strip().lower()
-    
-    # Strip suffixes from the end
-    root_term = term
-    for suffix in suffixes:
-        if root_term.endswith(f" {suffix}"):
-            root_term = root_term[:-len(suffix)].strip()
-            break
-            
-    # Generate variations
-    variations = set()
-    variations.add(tr_capitalize(root_term))
-    variations.add(tr_upper(root_term))
-    
-    # Also include the original term as variations if it was different
-    if root_term != term:
-        variations.add(tr_capitalize(term))
-        variations.add(tr_upper(term))
-    
-    # Build OR filter
-    filter_parts = [f"contains({search_field}, '{v}')" for v in variations if v]
-    if not filter_parts:
-        return ""
-    return f"({' or '.join(filter_parts)})"
+    term = term.strip()
+    # Also try Latin I → Turkish İ (e.g. "ISTANBUL" → "İSTANBUL")
+    tr_i = term.replace("I", "İ").replace("i", "İ")
+    variations = {tr_cap(term), tr_upper(term), term.upper(), term.lower(), term, tr_i, tr_i.upper()}
+    parts = [f"contains({search_field}, '{v}')" for v in variations if v]
+    return f"({' or '.join(parts)})"
 
 # ── Settings & Dependencies ─────────────────────────────
 settings = get_settings()
@@ -143,7 +115,10 @@ mcp = FastMCP(
         "1. **SEARCH BY NAME**: ALWAYS use `contains(column, 'value')` for text fields (`mserp_itemname`, `mserp_inventsitename`, etc.). NEVER use `eq` for text fields — it requires an exact match and will miss records like 'Muş Tesisi' when searching for 'Muş'.\n"
         "2. **NO TECHNICAL IDs**: NEVER use fields ending in 'id' (e.g., `mserp_siteid`) for filtering by text. They do not exist for you.\n"
         "3. **DATE AUTOMATION**: The server automatically filters to the LATEST date. Do NOT add `mserp_headerreportdate` to filters unless a specific past date is requested.\n"
-        "4. **TURKISH CHARS**: Dataverse search is SENSITIVE to Turkish characters. If searching for Muş, use exact 'Muş' or 'MUŞ' in `contains()`. NEVER swap 'Ş' for 'S'.\n\n"
+        "4. **DATE RANGES**: NEVER use OData date functions like `month()`, `year()`, `day()` — they are NOT supported by F&O Virtual Entities. "
+        "Use ISO date range instead: 'Bu ay' → `mserp_headerreportdate ge 2026-03-01 and mserp_headerreportdate le 2026-03-31`. "
+        "'Belirli bir tarih' → `mserp_headerreportdate eq 2026-03-14`.\n"
+        "5. **TURKISH CHARS**: Dataverse search is SENSITIVE to Turkish characters. If searching for Muş, use exact 'Muş' or 'MUŞ' in `contains()`. NEVER swap 'Ş' for 'S'.\n\n"
 
         # ── UNIVERSAL DATA AWARENESS ──────────────────────────
         "## Universal Data Awareness — How you 'see' everything\n"
@@ -157,11 +132,14 @@ mcp = FastMCP(
         # ── MULTI-STEP ANALYSIS WORKFLOW ──────────────────────
         "## Multi-Step Analysis Workflow\n"
         "For comprehensive insights on the LATEST data, follow this pattern:\n"
-        "1. Start with `calculate_inventory_totals` (Eagle Eye) to see the big picture (totals by company/site).\n"
-        "2. Identify anomalies or interests, then `query_inventory_aging` (Paging) to see specific examples.\n"
-        "3. If a specific entity is mentioned, use `search_inventory_aging` (Searchlight).\n"
-        "4. Combine and cross-reference all results to produce actionable insights.\n"
-        "5. If deeper drill-down is needed, use filter_query to fix one dimension, then group_by another.\n"
+        "1. **Aggregate first**: Use `calculate_inventory_totals` for totals — no rows downloaded, instant results.\n"
+        "   - 'Tesis bazında stok' → `calculate_inventory_totals(numeric_field=mserp_qty, agg_type=sum, group_by=mserp_inventsitename)`\n"
+        "   - 'Ortalama envanter yaşı' → `calculate_weighted_average(value_field=mserp_purchfifo, weight_field=mserp_qty)`\n"
+        "   - Çok boyutlu analiz için farklı `group_by` değerleriyle DEFALARCA çağır.\n"
+        "2. **Drill-down**: Anomali veya ilgi çeken bir şey varsa `search_inventory_aging` ile detay getir.\n"
+        "3. **Paging**: Ham kayıtlar için `query_inventory_aging` kullan; devam için `next_token` parametresini ilet.\n"
+        "4. **Multi-metric**: Aynı alan için sum/avg/min/max/count istersen `calculate_multi_metrics` ile tek çağrıda al.\n"
+        "5. **Kombinasyon**: `filter_query` ile bir boyutu sabitle, `group_by` ile diğerini analiz et.\n"
     ),
 )
 
