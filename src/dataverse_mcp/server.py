@@ -96,7 +96,8 @@ mcp = FastMCP(
         "| Product Group (Level 2) | mserp_etgproductlevel02name | Ana grup e.g. Tahıl, Bakliyat, Yağlı Tohumlar |\n"
         "| Product Category (Level 3) | mserp_etgproductlevel03name | Alt grup e.g. Buğday, Nohut, Mısır |\n"
         "| Quantity | mserp_qty | Inventory quantity (numeric) |\n"
-        "| FIFO Age (days) | mserp_purchfifo | Days since purchase (FIFO) |\n"
+        "| Total Value (TL) | mserp_amountmst | Total inventory value in company currency (TL). Use for: fiyat, tutar, değer, maliyet, toplam değer |\n"
+        "| FIFO Age (days) | mserp_purchfifo | Days since purchase (FIFO) — NOT a monetary field |\n"
         "| Report Date | mserp_headerreportdate | Use for ALL date filtering |\n"
         "| Site / Facility | mserp_inventsitename | e.g. Gaziantep Tesisi, Muş |\n"
         "| Warehouse | mserp_inventlocationname | Sub-location within a site |\n"
@@ -113,7 +114,7 @@ mcp = FastMCP(
         "If the term appears there → use `mserp_etgproductlevel02name`. If not → use `mserp_etgproductlevel03name`.\n"
         "- 'tesis' / 'depo' / 'site' → use `mserp_inventsitename`\n"
         "- 'şirket' / 'firma' → use `mserp_companyname`\n"
-        "- **'fiyat' / 'tutar' / 'değer' / 'maliyet' / 'toplam değer'** → use `mserp_purchfifo` — this is the ONLY financial/cost field available. There is NO `mserp_amountmst`, `mserp_cost`, or `mserp_price`.\n"
+        "- **'fiyat' / 'tutar' / 'değer' / 'maliyet' / 'toplam değer'** → use `mserp_amountmst` (total inventory value in TL). NEVER use `mserp_purchfifo` for monetary queries.\n"
         "- **'ortalama yaş' (average age)** → ALWAYS use `calculate_weighted_average` with `mserp_purchfifo` weighted by `mserp_qty`.\n\n"
 
         # ── FILTERING RULES — NO EXCEPTIONS ──────────────────
@@ -125,7 +126,7 @@ mcp = FastMCP(
         "Use ISO date range instead: 'Bu ay' → `mserp_headerreportdate ge 2026-03-01 and mserp_headerreportdate le 2026-03-31`. "
         "'Belirli bir tarih' → `mserp_headerreportdate eq 2026-03-14`.\n"
         "5. **TURKISH CHARS**: Dataverse search is SENSITIVE to Turkish characters. If searching for Muş, use exact 'Muş' or 'MUŞ' in `contains()`. NEVER swap 'Ş' for 'S'.\n"
-        "6. **FINANCIAL FIELD**: There is NO `mserp_amountmst`, `mserp_cost`, `mserp_price`. The ONLY financial/value field is `mserp_purchfifo`. Use it for: fiyat, tutar, değer, maliyet, toplam değer. If a tool returns COLUMN NOT FOUND, switch to mserp_purchfifo immediately.\n\n"
+        "6. **FINANCIAL FIELD**: `mserp_amountmst` = total inventory value in TL (use for: fiyat, tutar, değer, maliyet, toplam değer). `mserp_purchfifo` = FIFO age in DAYS (NOT money). NEVER sum `mserp_purchfifo` for monetary totals.\n\n"
 
         # ── UNIVERSAL DATA AWARENESS ──────────────────────────
         "## Universal Data Awareness — How you 'see' everything\n"
@@ -470,7 +471,8 @@ async def calculate_inventory_totals(
     - 'Kaç farklı ürün var?' → agg_type=count, group_by=mserp_itemname
     - 'Ana grup (Seviye 2) bazında toplam miktar' → group_by=mserp_etgproductlevel02name
     - 'Alt kategori (Seviye 3) bazında toplam miktar' → group_by=mserp_etgproductlevel03name
-    - 'Tahıl grubunun toplam değeri' → filter_query="contains(mserp_etgproductlevel02name,'Tah')", numeric_field=mserp_purchfifo
+    - 'Tahıl grubunun toplam değeri (TL)' → filter_query="contains(mserp_etgproductlevel02name,'Tah')", numeric_field=mserp_amountmst
+    - 'Tüm grupların toplam değeri' → numeric_field=mserp_amountmst, agg_type=sum, group_by=mserp_etgproductlevel02name
     - Çok boyutlu analiz için farklı group_by değerleriyle DEFALARCA çağır.
 
     KULLANMA:
@@ -483,7 +485,7 @@ async def calculate_inventory_totals(
     - Tarih filtresi için filter_query parametresini kullan.
 
     Args:
-        numeric_field: Agregasyon yapılacak kolon (örn. 'mserp_qty', 'mserp_purchfifo'). Sayım için boş bırak.
+        numeric_field: Agregasyon yapılacak kolon. Miktar: 'mserp_qty'. Toplam değer (TL): 'mserp_amountmst'. FIFO yaş (gün): 'mserp_purchfifo'. Sayım için boş bırak.
         agg_type: 'sum', 'average', 'min', 'max' veya 'count'.
         group_by: Gruplama kolonu (örn. 'mserp_inventsitename', 'mserp_companyname'). ASLA tarih field'ı yazma.
         filter_query: Kapsamı daraltmak için OData $filter (örn. "contains(mserp_companyname, 'MESQ')").
@@ -496,8 +498,8 @@ async def calculate_inventory_totals(
             if fixed is None:
                 return (
                     f"COLUMN NOT FOUND: '{numeric_field}' is not a valid column. "
-                    f"Available numeric fields: mserp_qty (quantity), mserp_purchfifo (FIFO cost/value). "
-                    f"For financial value/price/cost queries use numeric_field='mserp_purchfifo'."
+                    f"Available numeric fields: mserp_qty (quantity), mserp_amountmst (total value in TL), mserp_purchfifo (FIFO age in days). "
+                    f"For financial value/price/cost queries use numeric_field='mserp_amountmst'."
                 )
             numeric_field = fixed
         group_by = fix_group_by(group_by)
@@ -567,7 +569,7 @@ async def calculate_multi_metrics(
     - Ağırlıklı ortalama yaş → calculate_weighted_average kullan
 
     Args:
-        numeric_field: Analiz edilecek kolon (örn. 'mserp_qty', 'mserp_purchfifo').
+        numeric_field: Analiz edilecek kolon. Miktar: 'mserp_qty'. Toplam değer (TL): 'mserp_amountmst'. FIFO yaş (gün): 'mserp_purchfifo'.
         filter_query: Kapsamı daraltmak için OData $filter ifadesi.
     """
     try:
@@ -575,8 +577,8 @@ async def calculate_multi_metrics(
         if fixed is None:
             return (
                 f"COLUMN NOT FOUND: '{numeric_field}' is not a valid column. "
-                f"Available numeric fields: mserp_qty (quantity), mserp_purchfifo (FIFO cost/value). "
-                f"For financial value/price/cost queries use numeric_field='mserp_purchfifo'."
+                f"Available numeric fields: mserp_qty (quantity), mserp_amountmst (total value in TL), mserp_purchfifo (FIFO age in days). "
+                f"For financial value/price/cost queries use numeric_field='mserp_amountmst'."
             )
         numeric_field = fixed
         filter_query = fix_filter(filter_query)

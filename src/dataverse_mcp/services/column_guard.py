@@ -16,7 +16,8 @@ ALLOWED_COLUMNS: set[str] = {
     "mserp_etgproductlevel02name",
     "mserp_etgproductlevel03name",
     "mserp_qty",
-    "mserp_purchfifo",
+    "mserp_amountmst",   # Total inventory value in company currency (TL)
+    "mserp_purchfifo",   # FIFO age in days (NOT monetary value)
     "mserp_headerreportdate",
     "mserp_inventsitename",
     "mserp_inventlocationname",
@@ -65,17 +66,23 @@ COLUMN_ALIASES: dict[str, str] = {
     # Date
     "mserp_reportdate": "mserp_headerreportdate",
     "mserp_date": "mserp_headerreportdate",
-    # Financial Value / FIFO Cost (mserp_purchfifo is the only financial field)
-    "mserp_amount": "mserp_purchfifo",
-    "mserp_amountmst": "mserp_purchfifo",
-    "mserp_cost": "mserp_purchfifo",
-    "mserp_price": "mserp_purchfifo",
-    "mserp_value": "mserp_purchfifo",
+    # Monetary Value (mserp_amountmst = total inventory value in TL / company currency)
+    "mserp_amount": "mserp_amountmst",
+    "mserp_cost": "mserp_amountmst",
+    "mserp_value": "mserp_amountmst",
+    "mserp_totalcost": "mserp_amountmst",
+    "mserp_totalamount": "mserp_amountmst",
+    "mserp_inventvalue": "mserp_amountmst",
+    "mserp_toplam": "mserp_amountmst",
+    "mserp_deger": "mserp_amountmst",
+    "mserp_toplamtutar": "mserp_amountmst",
+    "mserp_toplamfiyat": "mserp_amountmst",
+    # FIFO age in days (NOT monetary value)
     "mserp_fifo": "mserp_purchfifo",
+    "mserp_fifoage": "mserp_purchfifo",
     "mserp_purchprice": "mserp_purchfifo",
-    "mserp_totalcost": "mserp_purchfifo",
-    "mserp_totalamount": "mserp_purchfifo",
-    "mserp_inventvalue": "mserp_purchfifo",
+    # price/unit-price aliases — these are per-unit, not totals; map to amountmst for aggregation
+    "mserp_price": "mserp_amountmst",
 }
 
 
